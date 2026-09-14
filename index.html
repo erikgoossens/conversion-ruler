@@ -1,0 +1,2060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vertical Ruler 9</title>
+    <style>
+        body {
+            margin: 0;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            cursor: grab;
+        }
+
+        #hud {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        #gaugeMaterial {
+            pointer-events: auto;
+            background: rgba(240, 240, 240, 0.94);
+            border: 1px solid #c8c8c8;
+            border-radius: 8px;
+            padding: 8px 12px 10px;
+            min-width: 168px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        }
+        #gaugeMaterial.hidden {
+            display: none;
+        }
+        #gaugeMaterial .gauge-caption {
+            font-size: 11px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        #materialSlider {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            cursor: ns-resize;
+        }
+        #materialSlider::before {
+            content: '';
+            position: absolute;
+            left: 7px;
+            top: 12px;
+            bottom: 12px;
+            width: 2px;
+            background: #c5c5c5;
+            border-radius: 1px;
+            pointer-events: none;
+        }
+        .material-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 2px 5px 0;
+            cursor: pointer;
+            position: relative;
+            border-radius: 4px;
+        }
+        .material-option:hover {
+            background: rgba(13, 115, 119, 0.06);
+        }
+        .material-option input {
+            position: absolute;
+            opacity: 0;
+            width: 1px;
+            height: 1px;
+            margin: 0;
+            pointer-events: none;
+        }
+        .material-stop {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid #9aa;
+            background: #f0f0f0;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            z-index: 1;
+        }
+        .material-option:hover .material-stop {
+            border-color: #0d7377;
+        }
+        .material-option:has(input:checked) .material-stop {
+            background: #0d7377;
+            border-color: #0d7377;
+            box-shadow: 0 0 0 3px rgba(13, 115, 119, 0.22);
+        }
+        .material-name {
+            font-size: 14px;
+            color: #333;
+            line-height: 1.2;
+        }
+        .material-option:has(input:checked) .material-name {
+            font-weight: bold;
+            color: #0d7377;
+        }
+        .material-option:has(input:focus-visible) {
+            outline: 2px solid #0d7377;
+            outline-offset: 1px;
+        }
+
+        #hudBottom {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            pointer-events: none;
+        }
+        #zoomLabel {
+            font-size: 28px;
+            color: #d3d3d3;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        #zoomLabel.hidden {
+            display: none;
+        }
+        #helpBtn {
+            pointer-events: auto;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid #333;
+            background: #fff;
+            color: #111;
+            font-size: 22px;
+            font-weight: bold;
+            line-height: 1;
+            cursor: pointer;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        #helpBtn:hover {
+            background: #111;
+            color: #fff;
+            border-color: #111;
+        }
+        #helpBtn:focus-visible {
+            outline: 3px solid #0d7377;
+            outline-offset: 2px;
+        }
+
+        #helpOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: 30;
+            background: rgba(0, 0, 0, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        #helpOverlay.hidden {
+            display: none;
+        }
+        #helpPanel {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background: #f7f7f7;
+            border: 1px solid #bbb;
+            border-radius: 12px;
+            width: min(640px, 100%);
+            max-height: calc(100vh - 48px);
+            overflow: hidden;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+            padding: 28px 32px 24px;
+            color: #111;
+        }
+        #helpBody {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: scroll;
+            overscroll-behavior: contain;
+            padding-right: 4px;
+            scrollbar-gutter: stable;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #e0e0e0;
+        }
+        #helpBody::-webkit-scrollbar {
+            -webkit-appearance: none;
+            width: 10px;
+        }
+        #helpBody::-webkit-scrollbar-track {
+            background: #e0e0e0;
+            border-radius: 5px;
+        }
+        #helpBody::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 5px;
+            min-height: 32px;
+        }
+        #helpClose {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: transparent;
+            font-size: 28px;
+            line-height: 1;
+            cursor: pointer;
+            color: #444;
+        }
+        #helpClose:hover {
+            color: #000;
+        }
+        #helpPanel h2 {
+            margin: 0 0 6px;
+            font-size: 22px;
+        }
+        #helpPanel p {
+            margin: 0 0 8px;
+            font-size: 15px;
+            line-height: 1.45;
+        }
+        #helpPanel h3 {
+            margin: 32px 0 8px;
+            font-size: 13px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #555;
+        }
+        #helpPanel h3:first-of-type {
+            margin-top: 22px;
+        }
+        #helpPanel table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 15px;
+        }
+        #helpPanel td {
+            padding: 5px 0;
+            vertical-align: top;
+        }
+        #helpPanel td.k {
+            width: 132px;
+            font-weight: bold;
+            white-space: nowrap;
+            padding-right: 12px;
+        }
+        #helpPanel kbd {
+            display: inline-block;
+            min-width: 1.2em;
+            padding: 1px 7px;
+            border: 1px solid #bbb;
+            border-bottom-width: 2px;
+            border-radius: 4px;
+            background: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        #helpPanel ul {
+            margin: 0;
+            padding-left: 18px;
+            font-size: 15px;
+        }
+        #helpPanel ul + table {
+            margin-top: 8px;
+        }
+        #helpPanel li {
+            margin: 6px 0;
+        }
+        #helpTip {
+            flex: 0 0 auto;
+            margin-top: 34px;
+            padding-top: 34px;
+            border-top: 1px solid #ccc;
+        }
+        #helpTip p {
+            margin: 0 0 8px;
+            font-size: 15px;
+            line-height: 1.45;
+        }
+        #helpTip p:last-of-type {
+            margin-bottom: 14px;
+        }
+        .tip-pay {
+            --tip-accent: #008CFF;
+            --tip-accent-hover: #0074d4;
+            --tip-accent-wash: #e8f4ff;
+        }
+        .tip-pay.paypal {
+            --tip-accent: #0070ba;
+            --tip-accent-hover: #005ea6;
+            --tip-accent-wash: #e5f3fb;
+        }
+        .tip-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .tip-switch {
+            position: relative;
+            display: inline-grid;
+            grid-template-columns: 1fr 1fr;
+            width: max-content;
+            height: 32px;
+            border-radius: 16px;
+            background: var(--tip-accent);
+            border: none;
+            cursor: pointer;
+            padding: 2px;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            touch-action: none;
+            user-select: none;
+        }
+        .tip-switch-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: calc(50% - 2px);
+            height: calc(100% - 4px);
+            border-radius: 14px;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+            transition: left 0.18s ease;
+            pointer-events: none;
+        }
+        .tip-switch.dragging .tip-switch-thumb {
+            transition: none;
+        }
+        .tip-pay.paypal .tip-switch-thumb {
+            left: 50%;
+        }
+        .tip-switch-opt {
+            position: relative;
+            z-index: 1;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            line-height: 28px;
+            text-align: center;
+            color: #fff;
+            user-select: none;
+            padding: 0 8px;
+        }
+        .tip-pay:not(.paypal) .tip-switch-opt.venmo,
+        .tip-pay.paypal .tip-switch-opt.paypal {
+            color: var(--tip-accent);
+        }
+        .tip-btns {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        a.tip-btn {
+            display: inline-block;
+            padding: 8px 14px;
+            border-radius: 8px;
+            background: var(--tip-accent);
+            color: #fff;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: bold;
+            line-height: 1;
+            border: none;
+        }
+        a.tip-btn:hover {
+            background: var(--tip-accent-hover);
+        }
+        a.tip-btn.other {
+            background: #fff;
+            color: var(--tip-accent);
+            border: 2px solid var(--tip-accent);
+            padding: 6px 12px;
+        }
+        a.tip-btn.other:hover {
+            background: var(--tip-accent-wash);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="rulerCanvas"></canvas>
+
+    <div id="hud">
+        <div id="gaugeMaterial" class="hidden">
+            <div class="gauge-caption">Sheet metal gauge</div>
+            <div id="materialSlider" role="radiogroup" aria-label="Gauge material"></div>
+        </div>
+        <div id="hudBottom">
+            <div id="zoomLabel" class="hidden">Zoom Scale: 1000</div>
+            <button type="button" id="helpBtn" aria-label="Show keyboard shortcuts and controls">?</button>
+        </div>
+    </div>
+
+    <div id="helpOverlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+        <div id="helpPanel">
+            <button type="button" id="helpClose" aria-label="Close help">&times;</button>
+            <div id="helpBody">
+            <h2 id="helpTitle">Keyboard shortcuts &amp; controls</h2>
+
+            <h3>Shortcuts</h3>
+            <table>
+                <tr><td class="k"><kbd>T</kbd></td><td>Threads: Show/hide thread sizes.</td></tr>
+                <tr><td class="k"><kbd>G</kbd></td><td>Gauge: Show/hide sheet-metal gauge thicknesses. Choose a metal with the selector in the bottom-right.</td></tr>
+                <tr><td class="k"><kbd>D</kbd></td><td>Decimal: Switch inch labels between fractions and decimals.</td></tr>
+            </table>
+
+            <h3>Conversion</h3>
+            <ul>
+                <li>The left half of the ruler is millimeters; the right half is inches. Move the pointer to the side you want to enter, then type a number. On the inches side, feel free to use spaces and forward-slashes for fractions (eg. 3 1/4). Hitting Enter converts it to a decimal, and provides the metric conversion.</li>
+                <li>Click a tick mark to load that value and convert it.</li>
+                <li>Click a conversion value to copy it to the clipboard.</li>
+            </ul>
+            <table>
+                <tr><td class="k"><kbd>Backspace</kbd></td><td>Delete the last typed character.</td></tr>
+                <tr><td class="k"><kbd>Enter</kbd></td><td>Confirm the typed value (for inch fractions)</td></tr>
+                <tr><td class="k"><kbd>C</kbd></td><td>Clear the typed value and any measured selection.</td></tr>
+            </table>
+
+            <h3>Measurement</h3>
+            <ul>
+                <li>Click+Drag along the tick marks to stretch a red bar between two points. As you stretch it, the end will snap to the tick marks shown at the current zoom, on whichever side the pointer is currently on. You can zoom in or out while stretching a measurement. Its length is shown at the top in millimeters and inches.</li>
+                <li>Drag the red bar to move it. As you drag, it snaps to the nearest tick mark on the side you grabbed — millimeters on the left, inches on the right. With the gauge or threads overlays on, it also snaps to gauges and thread sizes.</li>
+                <li>Click empty space to clear the current measurement.</li>
+            </ul>
+
+            <h3>Navigation</h3>
+            <ul>
+                <li>Drag near the sides of the screen to pan the ruler.</li>
+                <li>Trackpad scroll pans. Mouse wheel, pinch, or Ctrl+scroll zooms.</li>
+            </ul>
+            </div>
+
+            <div id="helpTip">
+                <p>I hope this helps you navigate the <em>madness</em> of mixing metric and imperial 😂</p>
+                <p>If you love this tool and would like to leave me a tip, you have my sincere gratitude!</p>
+                <div class="tip-pay" id="tipPay">
+                    <div class="tip-row">
+                        <button type="button" id="tipToggle" class="tip-switch" role="switch"
+                            aria-checked="false" aria-label="Choose Venmo or PayPal">
+                            <span class="tip-switch-thumb"></span>
+                            <span class="tip-switch-opt venmo">Venmo</span>
+                            <span class="tip-switch-opt paypal">PayPal</span>
+                        </button>
+                        <div class="tip-btns" id="tipButtons">
+                            <a class="tip-btn" data-amount="1" target="_blank" rel="noopener noreferrer">$1</a>
+                            <a class="tip-btn" data-amount="5" target="_blank" rel="noopener noreferrer">$5</a>
+                            <a class="tip-btn" data-amount="10" target="_blank" rel="noopener noreferrer">$10</a>
+                            <a class="tip-btn other" data-amount="other" target="_blank" rel="noopener noreferrer">Other</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('rulerCanvas');
+        const ctx = canvas.getContext('2d');
+        const zoomLabelEl = document.getElementById('zoomLabel');
+        const gaugeMaterialEl = document.getElementById('gaugeMaterial');
+        const materialSliderEl = document.getElementById('materialSlider');
+        const helpBtn = document.getElementById('helpBtn');
+        const helpOverlay = document.getElementById('helpOverlay');
+        const helpClose = document.getElementById('helpClose');
+        const helpPanel = document.getElementById('helpPanel');
+
+        let offsetY = 0;
+        let scale = 1000;
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let mouseMoved = false;
+
+        const DRAG_THRESHOLD = 5;
+        const MM_PER_INCH = 25.4;
+        const PHI_INV = 0.61803398875;
+        const TICK_SCALE = 4;                    // still used for metric side
+        const BUFFER = 10;
+        const TICK_LINE_WIDTH = 1;
+        const CURSOR_LINE_WIDTH = TICK_LINE_WIDTH * 3;
+        const HIGHLIGHT_COLOR = '#d80000';
+        const GAUGE_COLOR = '#0d7377';
+        const TRACKPAD_DELTA_THRESHOLD = 10;
+        const READOUT_PAD = 20;
+        const PAGE_BG = '#f0f0f0';
+        const SIDE_DIM = 'rgba(0,0,0,0.1)';
+        const SELECTION_WIDTH = 64;
+        const SELECTION_FILL = HIGHLIGHT_COLOR;
+        const MIN_SCALE = 10;
+        const MAX_SCALE_DEFAULT = 1000;
+        const MAX_SCALE_GAUGE = 3000;
+        const GAUGE_LABEL_GAP = 14;
+        const GAUGE_PRIORITY = [16, 14, 18, 12, 20, 10, 22, 24, 11, 8, 26, 28, 7, 6, 9, 13, 15, 17, 19, 21, 23, 25, 27, 30, 5, 4, 3, 29];
+
+        let inputSide = null;
+        let inputSideWhenSet = null;
+        let inputString = '';
+        let frozenMmReadout = null;
+        let showThreads = false;
+        let showGauges = false;
+        let gaugeMaterialIndex = 0;
+        let showHelp = false;
+        let showZoomScale = false;
+        let useDecimalInches = false;
+        let readoutHits = { left: null, right: null };
+        let copyFlashUntil = 0;
+        let copyFlashSide = null;
+
+        // Selection between two tick marks (absolute inches on the ruler)
+        // { startInches, endInches } — order preserved from create drag
+        let selection = null;
+
+        // Drag modes: null | 'pan' | 'create-selection' | 'move-selection'
+        let dragMode = null;
+        let lastPointerX = 0;
+        let lastPointerY = 0;
+        let createSnapSide = null;
+        let createStartInches = null;
+        let createEndInches = null;
+        let moveSnapSide = null;
+        let moveOrigin = null;       // selection at start of move
+        let moveGrabInches = null;   // world-Y (inches) at grab
+
+        // Imperial base — scaled up so full inch = 200 px
+        const baseTickLength = 200;
+        const wholeTickLength = baseTickLength;  // full-inch ticks = 200 pixels
+
+        // Custom cursor: thick horizontal line
+        const cursorCanvas = document.createElement('canvas');
+        cursorCanvas.width = 32;
+        cursorCanvas.height = 32;
+        const cursorCtx = cursorCanvas.getContext('2d');
+        cursorCtx.strokeStyle = 'black';
+        cursorCtx.lineWidth = CURSOR_LINE_WIDTH;
+        cursorCtx.beginPath();
+        cursorCtx.moveTo(0, 16);
+        cursorCtx.lineTo(32, 16);
+        cursorCtx.stroke();
+        const customCursor = cursorCanvas.toDataURL();
+        const customCursorCSS = `url(${customCursor}) 16 16, auto`;
+
+        const threadSizes = [
+            {label: '#0', diameter: 0.060, tpis: null},
+            {label: '#1', diameter: 0.073, tpis: null},
+            {label: '#2', diameter: 0.086, tpis: null},
+            {label: '#3', diameter: 0.099, tpis: null},
+            {label: '#4', diameter: 0.112, tpis: null},
+            {label: '#5', diameter: 0.125, tpis: null},
+            {label: '#6', diameter: 0.138, tpis: null},
+            {label: '#7', diameter: 0.151, tpis: null},
+            {label: '#8', diameter: 0.164, tpis: null},
+            {label: '#9', diameter: 0.177, tpis: null},
+            {label: '#10', diameter: 0.190, tpis: null},
+            {label: '#11', diameter: 0.203, tpis: null},
+            {label: '#12', diameter: 0.216, tpis: null},
+            {label: '1/4"', diameter: 0.250, tpis: [20, 28, 32]},
+            {label: '5/16"', diameter: 0.3125, tpis: [18, 24, 32]},
+            {label: '3/8"', diameter: 0.375, tpis: [16, 24, 32]},
+            {label: '7/16"', diameter: 0.4375, tpis: [14, 20, 28]},
+            {label: '1/2"', diameter: 0.5, tpis: [13, 20, 28]},
+            {label: '9/16"', diameter: 0.5625, tpis: [12, 18, 24]},
+            {label: '5/8"', diameter: 0.625, tpis: [11, 18, 24]},
+            {label: '3/4"', diameter: 0.75, tpis: [10, 16, 20]},
+            {label: '7/8"', diameter: 0.875, tpis: [9, 14, 20]},
+            {label: '1"', diameter: 1.0, tpis: [8, 12, 20]},
+            {label: '1-1/8"', diameter: 1.125, tpis: [7, 12, 18]},
+            {label: '1-1/4"', diameter: 1.25, tpis: [7, 12, 18]},
+            {label: '1-3/8"', diameter: 1.375, tpis: [6, 12, 18]},
+            {label: '1-1/2"', diameter: 1.5, tpis: [6, 12, 18]},
+            {label: '1-5/8"', diameter: 1.625, tpis: [5]},
+            {label: '1-3/4"', diameter: 1.75, tpis: [5]},
+            {label: '1-7/8"', diameter: 1.875, tpis: [5]},
+            {label: '2"', diameter: 2.0, tpis: [4.5]},
+            {label: '2-1/4"', diameter: 2.25, tpis: [4.5]},
+            {label: '2-1/2"', diameter: 2.5, tpis: [4]},
+            {label: '2-3/4"', diameter: 2.75, tpis: [4]},
+            {label: '3"', diameter: 3.0, tpis: [4]},
+            {label: '3-1/4"', diameter: 3.25, tpis: [4]},
+            {label: '3-1/2"', diameter: 3.5, tpis: [4]},
+            {label: '3-3/4"', diameter: 3.75, tpis: [4]},
+            {label: '4"', diameter: 4.0, tpis: [4]}
+        ];
+
+        // Nominal sheet-metal gauge thicknesses (inches). Steel = Manufacturers'
+        // Standard Gauge; stainless uses its own table; aluminum/brass/copper
+        // share Brown & Sharpe (AWG). Galvanized includes zinc-coating allowance.
+        const BROWN_SHARPE_GAUGES = [
+            {ga: 3, inches: 0.2294}, {ga: 4, inches: 0.2043}, {ga: 5, inches: 0.1819},
+            {ga: 6, inches: 0.1620}, {ga: 7, inches: 0.1443}, {ga: 8, inches: 0.1285},
+            {ga: 9, inches: 0.1144}, {ga: 10, inches: 0.1019}, {ga: 11, inches: 0.0907},
+            {ga: 12, inches: 0.0808}, {ga: 13, inches: 0.0720}, {ga: 14, inches: 0.0641},
+            {ga: 15, inches: 0.0571}, {ga: 16, inches: 0.0508}, {ga: 17, inches: 0.0453},
+            {ga: 18, inches: 0.0403}, {ga: 19, inches: 0.0359}, {ga: 20, inches: 0.0320},
+            {ga: 21, inches: 0.0285}, {ga: 22, inches: 0.0253}, {ga: 23, inches: 0.0226},
+            {ga: 24, inches: 0.0201}, {ga: 25, inches: 0.0179}, {ga: 26, inches: 0.0159},
+            {ga: 27, inches: 0.0142}, {ga: 28, inches: 0.0126}, {ga: 29, inches: 0.0113},
+            {ga: 30, inches: 0.0100}
+        ];
+
+        const GAUGE_MATERIALS = [
+            {
+                name: 'Steel',
+                gauges: [
+                    {ga: 3, inches: 0.2391}, {ga: 4, inches: 0.2242}, {ga: 5, inches: 0.2092},
+                    {ga: 6, inches: 0.1943}, {ga: 7, inches: 0.1793}, {ga: 8, inches: 0.1644},
+                    {ga: 9, inches: 0.1495}, {ga: 10, inches: 0.1345}, {ga: 11, inches: 0.1196},
+                    {ga: 12, inches: 0.1046}, {ga: 13, inches: 0.0897}, {ga: 14, inches: 0.0747},
+                    {ga: 15, inches: 0.0673}, {ga: 16, inches: 0.0598}, {ga: 17, inches: 0.0538},
+                    {ga: 18, inches: 0.0478}, {ga: 19, inches: 0.0418}, {ga: 20, inches: 0.0359},
+                    {ga: 21, inches: 0.0329}, {ga: 22, inches: 0.0299}, {ga: 23, inches: 0.0269},
+                    {ga: 24, inches: 0.0239}, {ga: 25, inches: 0.0209}, {ga: 26, inches: 0.0179},
+                    {ga: 27, inches: 0.0164}, {ga: 28, inches: 0.0149}, {ga: 29, inches: 0.0135},
+                    {ga: 30, inches: 0.0120}
+                ]
+            },
+            {
+                name: 'Galvanized',
+                gauges: [
+                    {ga: 8, inches: 0.1681}, {ga: 9, inches: 0.1532}, {ga: 10, inches: 0.1382},
+                    {ga: 11, inches: 0.1233}, {ga: 12, inches: 0.1084}, {ga: 13, inches: 0.0934},
+                    {ga: 14, inches: 0.0785}, {ga: 15, inches: 0.0710}, {ga: 16, inches: 0.0635},
+                    {ga: 17, inches: 0.0575}, {ga: 18, inches: 0.0516}, {ga: 19, inches: 0.0456},
+                    {ga: 20, inches: 0.0396}, {ga: 21, inches: 0.0366}, {ga: 22, inches: 0.0336},
+                    {ga: 23, inches: 0.0306}, {ga: 24, inches: 0.0276}, {ga: 25, inches: 0.0247},
+                    {ga: 26, inches: 0.0217}, {ga: 27, inches: 0.0202}, {ga: 28, inches: 0.0187},
+                    {ga: 29, inches: 0.0172}, {ga: 30, inches: 0.0157}
+                ]
+            },
+            {
+                name: 'Stainless',
+                gauges: [
+                    {ga: 3, inches: 0.2500}, {ga: 4, inches: 0.2344}, {ga: 5, inches: 0.2187},
+                    {ga: 6, inches: 0.2031}, {ga: 7, inches: 0.1875}, {ga: 8, inches: 0.1719},
+                    {ga: 9, inches: 0.1563}, {ga: 10, inches: 0.1406}, {ga: 11, inches: 0.1250},
+                    {ga: 12, inches: 0.1094}, {ga: 13, inches: 0.0938}, {ga: 14, inches: 0.0781},
+                    {ga: 15, inches: 0.0703}, {ga: 16, inches: 0.0625}, {ga: 17, inches: 0.0563},
+                    {ga: 18, inches: 0.0500}, {ga: 19, inches: 0.0438}, {ga: 20, inches: 0.0375},
+                    {ga: 21, inches: 0.0344}, {ga: 22, inches: 0.0313}, {ga: 23, inches: 0.0281},
+                    {ga: 24, inches: 0.0250}, {ga: 25, inches: 0.0219}, {ga: 26, inches: 0.0188},
+                    {ga: 27, inches: 0.0172}, {ga: 28, inches: 0.0156}, {ga: 29, inches: 0.0141},
+                    {ga: 30, inches: 0.0125}
+                ]
+            },
+            { name: 'Aluminum', gauges: BROWN_SHARPE_GAUGES },
+            { name: 'Brass',    gauges: BROWN_SHARPE_GAUGES },
+            { name: 'Copper',   gauges: BROWN_SHARPE_GAUGES }
+        ];
+
+        function currentGauges() {
+            return GAUGE_MATERIALS[gaugeMaterialIndex].gauges;
+        }
+
+        function maxScale(cursorInches) {
+            if (showGauges) return MAX_SCALE_GAUGE;
+            if (showThreads && cursorInches != null && cursorInches >= 0 && cursorInches <= 0.25) {
+                return MAX_SCALE_GAUGE;
+            }
+            return MAX_SCALE_DEFAULT;
+        }
+
+        function zoomByFactor(factor, anchorY) {
+            const worldY = (anchorY + offsetY) / scale;
+            scale = Math.max(MIN_SCALE, Math.min(maxScale(worldY), scale * factor));
+            offsetY = worldY * scale - anchorY;
+        }
+
+        function clampScaleToMode() {
+            const cap = maxScale();
+            if (scale <= cap) return;
+            const my = canvas.height / 2;
+            const worldY = (my + offsetY) / scale;
+            scale = cap;
+            offsetY = worldY * scale - my;
+            clampZeroPosition();
+        }
+
+        function setGaugeMaterial(index) {
+            const next = Math.max(0, Math.min(GAUGE_MATERIALS.length - 1, index));
+            gaugeMaterialIndex = next;
+            materialSliderEl.querySelectorAll('input[name="gaugeMaterial"]').forEach(r => {
+                r.checked = Number(r.value) === gaugeMaterialIndex;
+            });
+            drawRuler();
+        }
+
+        function materialIndexFromClientY(clientY) {
+            const options = [...materialSliderEl.querySelectorAll('.material-option')];
+            let best = 0;
+            let bestDist = Infinity;
+            options.forEach((opt, i) => {
+                const r = opt.getBoundingClientRect();
+                const d = Math.abs(clientY - (r.top + r.height / 2));
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = i;
+                }
+            });
+            return best;
+        }
+
+        function buildMaterialSlider() {
+            materialSliderEl.innerHTML = '';
+            GAUGE_MATERIALS.forEach((m, i) => {
+                const label = document.createElement('label');
+                label.className = 'material-option';
+                const input = document.createElement('input');
+                input.type = 'radio';
+                input.name = 'gaugeMaterial';
+                input.value = String(i);
+                if (i === gaugeMaterialIndex) input.checked = true;
+                const stop = document.createElement('span');
+                stop.className = 'material-stop';
+                stop.setAttribute('aria-hidden', 'true');
+                const name = document.createElement('span');
+                name.className = 'material-name';
+                name.textContent = m.name;
+                label.appendChild(input);
+                label.appendChild(stop);
+                label.appendChild(name);
+                materialSliderEl.appendChild(label);
+            });
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            clampZeroPosition();
+            drawRuler();
+        }
+
+        const READOUT_PROXIMITY = 20;
+        let readoutBarActive = false;
+
+        function getReadoutBannerHeight() {
+            ctx.font = '48px Arial';
+            const m = ctx.measureText('0 mm');
+            const ascent = m.actualBoundingBoxAscent || 43;
+            const descent = m.actualBoundingBoxDescent || 10;
+            return READOUT_PAD + ascent + descent + READOUT_PAD;
+        }
+
+        function zeroLabelClearance() {
+            ctx.font = 'bold 32px Arial';
+            const m = ctx.measureText('0');
+            const ascent = m.actualBoundingBoxAscent || 29;
+            return Math.ceil(Math.max(0, ascent - 5)) + 6;
+        }
+
+        function zeroTopMargin() {
+            const clear = zeroLabelClearance();
+            if (readoutBarActive) return getReadoutBannerHeight() + clear;
+            return clear;
+        }
+
+        function readoutGlyphBox(text, side) {
+            ctx.font = '48px Arial';
+            const m = ctx.measureText(text);
+            const ascent = m.actualBoundingBoxAscent || 43;
+            const descent = m.actualBoundingBoxDescent || 10;
+            const w = m.width;
+            const h = ascent + descent;
+            const y = READOUT_PAD;
+            const x = side === 'left' ? READOUT_PAD : canvas.width - READOUT_PAD - w;
+            return { x, y, w, h };
+        }
+
+        function rectsClose(a, b, gap) {
+            return a.x < b.x + b.w + gap && a.x + a.w + gap > b.x &&
+                a.y < b.y + b.h + gap && a.y + a.h + gap > b.y;
+        }
+
+        function rulerNearReadouts(boxes, gap) {
+            if (!boxes.length) return false;
+            const yLimit = Math.max(...boxes.map(b => b.y + b.h)) + gap + 40;
+            const startPixel = offsetY;
+            const cx = canvas.width / 2;
+
+            function hit(x, y, w, h) {
+                const r = { x, y, w, h };
+                return boxes.some(b => rectsClose(r, b, gap));
+            }
+
+            const minMm = Math.max(0, (offsetY / scale) * MM_PER_INCH - 2);
+            const maxMm = minMm + (yLimit / scale) * MM_PER_INCH + 10;
+            const mmStep = scale < 50 ? 10 : scale <= 100 ? 5 : 1;
+            for (let mm = Math.floor(minMm / mmStep) * mmStep; mm <= maxMm; mm += mmStep) {
+                const yPos = (mm / MM_PER_INCH) * scale - startPixel;
+                if (yPos < -40 || yPos > yLimit + 40) continue;
+                let tickLength = 30 * TICK_SCALE;
+                if (scale > 100) {
+                    tickLength = (mm % 10 === 0) ? 30 * TICK_SCALE : (mm % 5 === 0) ? 20 * TICK_SCALE : 10 * TICK_SCALE;
+                } else if (scale < 50) {
+                    tickLength = (mm % 50 === 0) ? 30 * TICK_SCALE : 20 * TICK_SCALE;
+                } else {
+                    tickLength = (mm % 10 === 0) ? 30 * TICK_SCALE : 20 * TICK_SCALE;
+                }
+                if (hit(cx - tickLength, yPos - 1, tickLength, 3)) return true;
+                ctx.font = '24px Arial';
+                const t = `${Math.round(mm)}`;
+                const tw = ctx.measureText(t).width;
+                if (hit(cx - tickLength - 10 - tw, yPos - 20, tw, 28)) return true;
+            }
+
+            const maxInch = Math.max(0, offsetY / scale) + yLimit / scale + 2;
+            for (let inch = Math.max(0, Math.floor(offsetY / scale) - 1); inch <= maxInch; inch++) {
+                const yPos = inch * scale - startPixel;
+                if (yPos < -40 || yPos > yLimit + 40) continue;
+                if (hit(cx + 2, yPos - 1, wholeTickLength, 3)) return true;
+                ctx.font = 'bold 32px Arial';
+                const t = `${inch}`;
+                const tw = ctx.measureText(t).width;
+                if (hit(cx + 2 + wholeTickLength + 10, yPos - 28, tw + 40, 36)) return true;
+            }
+
+            if (showThreads) {
+                for (const th of threadSizes) {
+                    const yPos = th.diameter * scale - startPixel;
+                    if (yPos < -40 || yPos > yLimit + 40) continue;
+                    ctx.font = '14px Arial';
+                    const tw = ctx.measureText(th.label).width;
+                    if (hit(cx + 2, yPos - 1, wholeTickLength + 8 + tw, 16)) return true;
+                }
+            }
+            if (showGauges) {
+                for (const g of currentGauges()) {
+                    const yPos = g.inches * scale - startPixel;
+                    if (yPos < -40 || yPos > yLimit + 40) continue;
+                    ctx.font = '14px Arial';
+                    const t = `${g.ga} ga`;
+                    const tw = ctx.measureText(t).width;
+                    if (hit(cx + 2, yPos - 1, wholeTickLength + 8 + tw, 16)) return true;
+                }
+            }
+            return false;
+        }
+
+        function clampZeroPosition() {
+            const min = -zeroTopMargin();
+            if (offsetY < min) {
+                offsetY = min;
+            }
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function initializeView() {
+            scale = 1000;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            offsetY = -zeroTopMargin();
+            drawRuler();
+        }
+
+        initializeView();
+
+        function getFractionLabel(sixtyFourth, exactFor64ths = false) {
+            if (useDecimalInches) {
+                const val = sixtyFourth / 64;
+                if (sixtyFourth % 64 === 0) return `${Math.floor(val)}`;
+                return formatNumber(val, 6);
+            }
+
+            const isWhole = sixtyFourth % 64 === 0;
+            if (isWhole) return `${Math.floor(sixtyFourth / 64)}`;
+            if (exactFor64ths) return `${sixtyFourth % 64}/64`;
+
+            const thirtySeconds = Math.round((sixtyFourth % 64 / 64) * 32);
+            const fractions = [
+                "0","1/32","1/16","3/32","1/8","5/32","3/16","7/32",
+                "1/4","9/32","5/16","11/32","3/8","13/32","7/16","15/32",
+                "1/2","17/32","9/16","19/32","5/8","21/32","11/16","23/32",
+                "3/4","25/32","13/16","27/32","7/8","29/32","15/16","31/32"
+            ];
+            return fractions[thirtySeconds] || "";
+        }
+
+        function parseInput(str) {
+            const s = str.trim().replace(/\s+/g, ' ');
+            if (!s) return NaN;
+            const mixed = s.match(/^(-?\d+(?:\.\d+)?)\s+(\d+)\s*\/\s*(\d+)$/);
+            if (mixed) {
+                const whole = parseFloat(mixed[1]);
+                const num = parseFloat(mixed[2]);
+                const den = parseFloat(mixed[3]);
+                if (isNaN(whole) || isNaN(num) || isNaN(den) || den === 0) return NaN;
+                return whole + Math.sign(whole || 1) * (num / den);
+            }
+            // Incomplete mixed number ("1 3", "1 3/") — keep the whole inches so far
+            if (/^(-?\d+(?:\.\d+)?)\s+\d*\s*\/?\s*$/.test(s)) {
+                return parseFloat(s);
+            }
+            if (!s.includes('/')) return parseFloat(s);
+            const parts = s.split('/').map(p => p.trim());
+            if (parts.length !== 2) return NaN;
+            const num = parseFloat(parts[0]);
+            const den = parseFloat(parts[1]);
+            if (isNaN(num)) return NaN;
+            if (isNaN(den) || den === 0) return num;
+            return num / den;
+        }
+
+        function formatNumber(num, maxDecimals) {
+            if (isNaN(num)) return 'Invalid';
+            let str = num.toFixed(maxDecimals);
+            str = str.replace(/\.?0+$/, '');
+            return str || '0';
+        }
+
+        function clearTopValues() {
+            selection = null;
+            createStartInches = null;
+            createEndInches = null;
+            inputString = '';
+            inputSideWhenSet = null;
+            frozenMmReadout = null;
+        }
+
+        function mouseToInches(mouseY) {
+            return (mouseY + offsetY) / scale;
+        }
+
+        function inchesToPixelY(inches) {
+            return inches * scale - offsetY;
+        }
+
+        function getMetricStepMm() {
+            if (scale < 50) return 10;
+            if (scale <= 100) return 5;
+            if (scale <= 509) return 1;
+            return 0.2;
+        }
+
+        function snapToMetricInches(inches) {
+            const mm = inches * MM_PER_INCH;
+            const step = getMetricStepMm();
+            let nearest = Math.round(mm / step) * step;
+            if (nearest < 0) nearest = 0;
+            const fixed = Number(nearest.toFixed(step === 0.2 ? 1 : 0));
+            return fixed / MM_PER_INCH;
+        }
+
+        function imperialSnapStepInches() {
+            if (scale < 18) return 1;
+            if (scale < 20) return 1 / 2;
+            if (scale <= 25) return 1 / 4;
+            if (scale <= 50) return 1 / 8;
+            if (scale <= 100) return 1 / 16;
+            if (scale <= 250) return 1 / 32;
+            return 1 / 64;
+        }
+
+        function snapToImperialInches(inches) {
+            const step = imperialSnapStepInches();
+            let nearest = Math.round(inches / step) * step;
+            if (nearest < 0) nearest = 0;
+            nearest = Math.round(nearest * 64) / 64;
+            return nearest;
+        }
+
+        function snapToNearestGauge(inches) {
+            let best = null;
+            let bestDist = Infinity;
+            currentGauges().forEach(g => {
+                const d = Math.abs(g.inches - inches);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = g.inches;
+                }
+            });
+            return best;
+        }
+
+        function snapToNearestThread(inches) {
+            let best = null;
+            let bestDist = Infinity;
+            threadSizes.forEach(t => {
+                const d = Math.abs(t.diameter - inches);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = t.diameter;
+                }
+            });
+            return best;
+        }
+
+        function snapToSide(inches, side) {
+            let snapped = side === 'left' ? snapToMetricInches(inches) : snapToImperialInches(inches);
+            if (showGauges) {
+                const gauge = snapToNearestGauge(inches);
+                if (gauge !== null && Math.abs(gauge - inches) <= Math.abs(snapped - inches)) {
+                    snapped = gauge;
+                }
+            }
+            if (showThreads) {
+                const thread = snapToNearestThread(inches);
+                if (thread !== null && Math.abs(thread - inches) <= Math.abs(snapped - inches)) {
+                    snapped = thread;
+                }
+            }
+            return snapped;
+        }
+
+        function resnapCreateSelection() {
+            if (dragMode !== 'create-selection' || createStartInches === null) return;
+            const endSide = sideFromX(lastPointerX);
+            const startSide = createSnapSide || endSide;
+            createStartInches = snapToSide(createStartInches, startSide);
+            createEndInches = snapToSide(mouseToInches(lastPointerY), endSide);
+        }
+
+        function sideFromX(x) {
+            return x < canvas.width / 2 ? 'left' : 'right';
+        }
+
+        function isInTickZone(x) {
+            const maxMm = 30 * TICK_SCALE;
+            const whole = wholeTickLength;
+            const leftB = canvas.width / 2 - maxMm;
+            const rightB = canvas.width / 2 + 2 + whole;
+            return x >= leftB && x <= rightB;
+        }
+
+        function getActiveSelection() {
+            if (dragMode === 'create-selection' && createStartInches !== null && createEndInches !== null) {
+                return { startInches: createStartInches, endInches: createEndInches };
+            }
+            return selection;
+        }
+
+        function getSelectionPixelBounds(sel) {
+            if (!sel) return null;
+            const y1 = inchesToPixelY(sel.startInches);
+            const y2 = inchesToPixelY(sel.endInches);
+            const top = Math.min(y1, y2);
+            const bottom = Math.max(y1, y2);
+            const cx = canvas.width / 2;
+            const half = SELECTION_WIDTH / 2;
+            return { top, bottom, left: cx - half, right: cx + half };
+        }
+
+        function isPointInSelection(x, y, sel) {
+            const b = getSelectionPixelBounds(sel);
+            if (!b) return false;
+            // Expand hit area slightly vertically for zero-thickness edge cases
+            return x >= b.left && x <= b.right && y >= b.top - 2 && y <= b.bottom + 2;
+        }
+
+        function drawSelectionHighlight(sel) {
+            if (!sel) return;
+            const len = Math.abs(sel.endInches - sel.startInches);
+            if (len < 1e-12) return;
+
+            const b = getSelectionPixelBounds(sel);
+            if (!b) return;
+
+            ctx.fillStyle = SELECTION_FILL;
+            ctx.fillRect(b.left, b.top, SELECTION_WIDTH, b.bottom - b.top);
+        }
+
+        function updateHud() {
+            zoomLabelEl.textContent = `Zoom Scale: ${Math.round(scale)}`;
+            zoomLabelEl.classList.toggle('hidden', !showZoomScale);
+            gaugeMaterialEl.classList.toggle('hidden', !showGauges);
+        }
+
+        function fillSideRect(x, y, w, h, side) {
+            ctx.fillStyle = PAGE_BG;
+            ctx.fillRect(x, y, w, h);
+            if (inputSide === side) {
+                ctx.fillStyle = SIDE_DIM;
+                ctx.fillRect(x, y, w, h);
+            }
+        }
+
+        function numberFromReadout(text) {
+            return (text || '').replace(/\s*(mm|in)\s*$/i, '').trim();
+        }
+
+        function setReadoutHit(side, x, y, w, h, text) {
+            readoutHits[side] = { x, y, w, h, number: numberFromReadout(text) };
+        }
+
+        function readoutHitAt(x, y) {
+            for (const side of ['left', 'right']) {
+                const b = readoutHits[side];
+                if (b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                    return { side, number: b.number };
+                }
+            }
+            return null;
+        }
+
+        function copyReadoutNumber(num, side) {
+            if (!num) return;
+            copyFlashSide = side;
+            const done = () => {
+                copyFlashUntil = Date.now() + 900;
+                drawRuler();
+                setTimeout(() => { if (Date.now() >= copyFlashUntil) drawRuler(); }, 950);
+            };
+            const fallback = () => {
+                const ta = document.createElement('textarea');
+                ta.value = num;
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); } catch (err) {}
+                document.body.removeChild(ta);
+                done();
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(num).then(done).catch(fallback);
+            } else {
+                fallback();
+            }
+        }
+
+        function drawReadoutBanner(leftText, rightText) {
+            const bannerH = getReadoutBannerHeight();
+            fillSideRect(0, 0, canvas.width / 2, bannerH, 'left');
+            fillSideRect(canvas.width / 2, 0, canvas.width / 2, bannerH, 'right');
+            if (leftText) setReadoutHit('left', 0, 0, canvas.width / 2, bannerH, leftText);
+            if (rightText) setReadoutHit('right', canvas.width / 2, 0, canvas.width / 2, bannerH, rightText);
+            drawReadoutText(leftText, rightText);
+        }
+
+        function drawReadoutText(leftText, rightText) {
+            ctx.font = '48px Arial';
+            const m = ctx.measureText('0');
+            const ascent = m.actualBoundingBoxAscent || 43;
+            const textY = READOUT_PAD + ascent;
+            ctx.fillStyle = '#000';
+            const flash = Date.now() < copyFlashUntil;
+            if (leftText) {
+                ctx.textAlign = 'left';
+                ctx.fillText(flash && copyFlashSide === 'left' ? 'Copied' : leftText, READOUT_PAD, textY);
+            }
+            if (rightText) {
+                ctx.textAlign = 'right';
+                ctx.fillText(flash && copyFlashSide === 'right' ? 'Copied' : rightText, canvas.width - READOUT_PAD, textY);
+            }
+        }
+
+        function drawReadoutChips(leftText, rightText) {
+            const pad = READOUT_PAD;
+            ctx.font = '48px Arial';
+            const m0 = ctx.measureText('0');
+            const ascent = m0.actualBoundingBoxAscent || 43;
+            const descent = m0.actualBoundingBoxDescent || 10;
+            const textY = pad + ascent;
+            const boxH = ascent + descent + pad * 2;
+            const flash = Date.now() < copyFlashUntil;
+            if (leftText) {
+                const w = ctx.measureText(leftText).width;
+                fillSideRect(0, 0, w + pad * 2, boxH, 'left');
+                setReadoutHit('left', 0, 0, w + pad * 2, boxH, leftText);
+                ctx.fillStyle = '#000';
+                ctx.textAlign = 'left';
+                ctx.fillText(flash && copyFlashSide === 'left' ? 'Copied' : leftText, pad, textY);
+            }
+            if (rightText) {
+                const w = ctx.measureText(rightText).width;
+                fillSideRect(canvas.width - w - pad * 2, 0, w + pad * 2, boxH, 'right');
+                setReadoutHit('right', canvas.width - w - pad * 2, 0, w + pad * 2, boxH, rightText);
+                ctx.fillStyle = '#000';
+                ctx.textAlign = 'right';
+                ctx.fillText(flash && copyFlashSide === 'right' ? 'Copied' : rightText, canvas.width - pad, textY);
+            }
+        }
+
+        function setHelpOpen(open) {
+            showHelp = open;
+            helpOverlay.classList.toggle('hidden', !showHelp);
+            helpBtn.setAttribute('aria-expanded', showHelp ? 'true' : 'false');
+        }
+
+        function gaugeLabelFits(yPos, placedYs) {
+            return placedYs.every(py => Math.abs(yPos - py) >= GAUGE_LABEL_GAP);
+        }
+
+        function drawGauges(startInch, endInch, startPixel, inputValueInches) {
+            const gauges = currentGauges();
+            const inView = [];
+            for (const g of gauges) {
+                const inches = g.inches;
+                if (inches < Math.max(0, startInch) || inches > endInch) continue;
+                const yPos = inches * scale - startPixel;
+                if (yPos < -50 || yPos > canvas.height + 50) continue;
+                inView.push({ ga: g.ga, inches, yPos });
+            }
+
+            inView.forEach(g => {
+                const highlight = inputValueInches !== null && Math.abs(inputValueInches - g.inches) < 0.0005;
+                ctx.strokeStyle = highlight ? HIGHLIGHT_COLOR : GAUGE_COLOR;
+                ctx.beginPath();
+                ctx.moveTo(canvas.width / 2 + 2, g.yPos);
+                ctx.lineTo(canvas.width / 2 + 2 + wholeTickLength, g.yPos);
+                ctx.stroke();
+            });
+
+            const byGa = new Map(inView.map(g => [g.ga, g]));
+            const placedYs = [];
+            const labelOrder = [];
+            GAUGE_PRIORITY.forEach(n => {
+                if (byGa.has(n)) labelOrder.push(byGa.get(n));
+            });
+            inView.forEach(g => {
+                if (!GAUGE_PRIORITY.includes(g.ga)) labelOrder.push(g);
+            });
+
+            labelOrder.forEach(g => {
+                if (!gaugeLabelFits(g.yPos, placedYs)) return;
+                const highlight = inputValueInches !== null && Math.abs(inputValueInches - g.inches) < 0.0005;
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillStyle = highlight ? HIGHLIGHT_COLOR : GAUGE_COLOR;
+                ctx.fillText(`${g.ga} ga`, canvas.width / 2 + 2 + wholeTickLength + 5, g.yPos + 5);
+                placedYs.push(g.yPos);
+            });
+        }
+
+        function drawRuler() {
+            readoutHits = { left: null, right: null };
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = PAGE_BG;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = TICK_LINE_WIDTH;
+
+            let startInch = offsetY / scale - BUFFER;
+            let endInch  = (offsetY + canvas.height) / scale + BUFFER;
+            let startPixel = offsetY;
+
+            let inputValueMm = null;
+            let inputValueInches = null;
+            const inputValue = parseInput(inputString);
+
+            if (!isNaN(inputValue) && inputString) {
+                if (inputSideWhenSet === 'left') {
+                    inputValueMm = inputValue;
+                    inputValueInches = inputValue / MM_PER_INCH;
+                } else {
+                    inputValueInches = inputValue;
+                    inputValueMm = inputValue * MM_PER_INCH;
+                }
+            }
+
+            let leftReadout = '';
+            let rightReadout = '';
+            const activeSelEarly = getActiveSelection();
+            const selLenEarly = activeSelEarly ? Math.abs(activeSelEarly.endInches - activeSelEarly.startInches) : 0;
+            if (activeSelEarly && selLenEarly > 1e-12) {
+                leftReadout = `${formatNumber(selLenEarly * MM_PER_INCH, 5)} mm`;
+                rightReadout = `${formatNumber(selLenEarly, 6)} in`;
+            } else if (inputString) {
+                const unit = inputSideWhenSet === 'left' ? 'mm' : 'in';
+                const primary = `${inputString} ${unit}`;
+                let converted = 'Invalid';
+                if (inputSideWhenSet === 'right' && frozenMmReadout && inputString.includes(' ')) {
+                    converted = frozenMmReadout;
+                } else if (!isNaN(inputValue)) {
+                    converted = inputSideWhenSet === 'left'
+                        ? formatNumber(inputValue / MM_PER_INCH, 6) + ' in'
+                        : formatNumber(inputValue * MM_PER_INCH, 5) + ' mm';
+                }
+                if (inputSideWhenSet === 'left') {
+                    leftReadout = primary;
+                    rightReadout = converted;
+                } else {
+                    rightReadout = primary;
+                    leftReadout = converted;
+                }
+            }
+
+            const readoutBoxes = [];
+            if (leftReadout) readoutBoxes.push(readoutGlyphBox(leftReadout, 'left'));
+            if (rightReadout) readoutBoxes.push(readoutGlyphBox(rightReadout, 'right'));
+            const needBar = readoutBoxes.length > 0 &&
+                rulerNearReadouts(readoutBoxes, READOUT_PROXIMITY);
+            readoutBarActive = needBar;
+            if (needBar) {
+                const minOff = -zeroTopMargin();
+                if (offsetY < minOff) offsetY = minOff;
+            }
+            startInch = offsetY / scale - BUFFER;
+            endInch  = (offsetY + canvas.height) / scale + BUFFER;
+            startPixel = offsetY;
+
+            const bannerH = getReadoutBannerHeight();
+            if (needBar) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, bannerH, canvas.width, Math.max(0, canvas.height - bannerH));
+                ctx.clip();
+            }
+
+            if (inputSide) {
+                const hlTop = needBar ? bannerH : 0;
+                ctx.fillStyle = SIDE_DIM;
+                ctx.fillRect(inputSide === 'left' ? 0 : canvas.width / 2, hlTop,
+                    canvas.width / 2, canvas.height - hlTop);
+                ctx.fillStyle = '#000';
+            }
+
+            // Selection highlight — drawn behind tick marks
+            drawSelectionHighlight(getActiveSelection());
+
+            // ── Metric (left) ───────────────────────────────────────────────
+            const minMm = Math.max(0, startInch * MM_PER_INCH);
+            if (scale <= 100) {
+                const mmTick = scale < 50 ? 10 : 5;
+                for (let mm = Math.ceil(minMm / mmTick) * mmTick; mm <= endInch * MM_PER_INCH; mm += mmTick) {
+                    const yPos = (mm / MM_PER_INCH) * scale - startPixel;
+                    if (yPos < -50 || yPos > canvas.height + 50) continue;
+                    let tickLength;
+                    if (scale < 50) {
+                        tickLength = (mm % 50 === 0) ? 30 * TICK_SCALE : 20 * TICK_SCALE;
+                    } else {
+                        tickLength = (mm % 10 === 0) ? 30 * TICK_SCALE : 20 * TICK_SCALE;
+                    }
+                    const highlight = inputValueMm !== null && Math.abs(inputValueMm - mm) < 0.001;
+                    ctx.strokeStyle = highlight ? HIGHLIGHT_COLOR : '#000';
+                    ctx.beginPath();
+                    ctx.moveTo(canvas.width / 2 - tickLength, yPos);
+                    ctx.lineTo(canvas.width / 2, yPos);
+                    ctx.stroke();
+                    if (mm < 0) continue;
+                    let showMmLabel = false;
+                    let mmFont = 24;
+                    if (scale < 20) {
+                        showMmLabel = mm % 100 === 0;
+                    } else if (scale < 50) {
+                        showMmLabel = mm % 50 === 0;
+                        mmFont = (mm % 100 === 0) ? 24 : 20;
+                    } else if (scale < 70) {
+                        showMmLabel = mm % 10 === 0;
+                        mmFont = (mm % 100 === 0) ? 24 : 16;
+                    } else {
+                        showMmLabel = mm % 10 === 0;
+                    }
+                    if (showMmLabel) {
+                        ctx.font = `${mmFont}px Arial`;
+                        ctx.textAlign = 'right';
+                        ctx.fillStyle = highlight ? HIGHLIGHT_COLOR : '#000';
+                        ctx.fillText(`${mm}`, canvas.width / 2 - tickLength - 10, yPos + 4);
+                        ctx.fillStyle = '#000';
+                    }
+                }
+            } else if (scale <= 509) {
+                for (let mm = Math.floor(minMm); mm <= endInch * MM_PER_INCH; mm++) {
+                    if (mm % 1 !== 0) continue;
+                    const yPos = (mm / MM_PER_INCH) * scale - startPixel;
+                    if (yPos < -50 || yPos > canvas.height + 50) continue;
+                    let tickLength = (mm % 10 === 0) ? 30 * TICK_SCALE : (mm % 5 === 0) ? 20 * TICK_SCALE : 5 * TICK_SCALE;
+                    const highlight = inputValueMm !== null && Math.abs(inputValueMm - mm) < 0.001;
+                    ctx.strokeStyle = highlight ? HIGHLIGHT_COLOR : '#000';
+                    ctx.beginPath();
+                    ctx.moveTo(canvas.width / 2 - tickLength, yPos);
+                    ctx.lineTo(canvas.width / 2, yPos);
+                    ctx.stroke();
+                    if (mm >= 0 && mm % (scale < 240 ? 10 : 5) === 0) {
+                        ctx.font = '24px Arial';
+                        ctx.textAlign = 'right';
+                        ctx.fillStyle = highlight ? HIGHLIGHT_COLOR : '#000';
+                        ctx.fillText(`${mm}`, canvas.width / 2 - tickLength - 10, yPos + 4);
+                        ctx.fillStyle = '#000';
+                    }
+                }
+            } else {
+                for (let sub = Math.floor(minMm * 5); sub <= endInch * MM_PER_INCH * 5; sub++) {
+                    if (sub % 1 !== 0) continue;
+                    const mmValue = sub / 5;
+                    const yPos = (mmValue / MM_PER_INCH) * scale - startPixel;
+                    if (yPos < -50 || yPos > canvas.height + 50) continue;
+                    let tickLength = (mmValue % 10 === 0) ? 30 * TICK_SCALE : (mmValue % 5 === 0) ? 20 * TICK_SCALE : (mmValue % 1 === 0) ? 10 * TICK_SCALE : 5 * TICK_SCALE;
+                    const highlight = inputValueMm !== null && Math.abs(inputValueMm - mmValue) < 0.001;
+                    ctx.strokeStyle = highlight ? HIGHLIGHT_COLOR : '#000';
+                    ctx.beginPath();
+                    ctx.moveTo(canvas.width / 2 - tickLength, yPos);
+                    ctx.lineTo(canvas.width / 2, yPos);
+                    ctx.stroke();
+                    if (mmValue >= 0 && mmValue % 1 === 0) {
+                        const mmFont = (scale < 1000 && mmValue % 5 !== 0) ? 18 : 24;
+                        ctx.font = `${mmFont}px Arial`;
+                        ctx.textAlign = 'right';
+                        ctx.fillStyle = highlight ? HIGHLIGHT_COLOR : '#000';
+                        ctx.fillText(`${Math.round(mmValue)}`, canvas.width / 2 - tickLength - 10, yPos + 4);
+                        ctx.fillStyle = '#000';
+                    }
+                }
+            }
+
+            // Thread labels (#0–#12) at high zoom
+            if (showThreads) {
+                threadSizes.forEach(thread => {
+                    if (!thread.label.startsWith('#')) return;
+                    if (scale < 1000) return;
+                    const inches = thread.diameter;
+                    if (inches < Math.max(0, startInch) || inches > endInch) return;
+                    const yPos = inches * scale - startPixel;
+                    if (yPos < -50 || yPos > canvas.height + 50) return;
+                    const highlight = Math.abs(inputValueInches - inches) < 0.001;
+                    ctx.strokeStyle = highlight ? HIGHLIGHT_COLOR : 'blue';
+                    ctx.beginPath();
+                    ctx.moveTo(canvas.width / 2 + 2, yPos);
+                    ctx.lineTo(canvas.width / 2 + 2 + wholeTickLength, yPos);
+                    ctx.stroke();
+                    ctx.font = '14px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillStyle = highlight ? HIGHLIGHT_COLOR : 'blue';
+                    ctx.fillText(thread.label, canvas.width / 2 + 2 + wholeTickLength + 5, yPos + 5);
+                });
+            }
+
+            // ── Imperial (right side) ────────────────────────────────────
+            const minInch = Math.max(0, startInch);
+            let sixtyFourth = Math.ceil(minInch * 64);
+            const sixtyFourthEnd = endInch * 64;
+            const sixtyFourthStep = scale < 18 ? 64
+                : scale < 20 ? 32
+                : scale <= 25 ? 16
+                : scale <= 50 ? 8
+                : scale <= 100 ? 4
+                : scale <= 250 ? 2
+                : 1;
+            if (sixtyFourth % sixtyFourthStep !== 0) {
+                sixtyFourth += sixtyFourthStep - (sixtyFourth % sixtyFourthStep);
+            }
+            for (; sixtyFourth <= sixtyFourthEnd; sixtyFourth += sixtyFourthStep) {
+                const fraction = sixtyFourth / 64;
+                const yPos = fraction * scale - startPixel;
+                if (yPos < -50 || yPos > canvas.height + 50) continue;
+
+                let tickLength;
+                let label = '';
+                let fontSize = 10;
+                let fontWeight = 'normal';
+                let textOffset = 10;
+                const isWhole = sixtyFourth % 64 === 0;
+                const highlight = inputValueInches !== null && Math.abs(inputValueInches - fraction) < 0.001;
+
+                if (isWhole) {
+                    tickLength = wholeTickLength;
+                    const inchNum = sixtyFourth / 64;
+                    const isMult12 = inchNum % 12 === 0;
+                    const isMult6 = inchNum % 6 === 0;
+                    const isMult3 = inchNum % 3 === 0;
+                    const z = Math.round(scale);
+                    const showIndented3 = z >= 18 && z < 30 && isMult3 && !isMult6;
+                    const showWhole = z <= 11 ? isMult12
+                        : z < 30 ? isMult6
+                        : true;
+                    if (showIndented3) {
+                        label = getFractionLabel(sixtyFourth);
+                        fontSize = 16;
+                        fontWeight = 'normal';
+                        textOffset = 8;
+                    } else if (showWhole) {
+                        label = getFractionLabel(sixtyFourth);
+                        if (z >= 12 && z <= 17 && isMult6 && !isMult12) {
+                            fontSize = 20;
+                            fontWeight = 'normal';
+                        } else if (z < 50 && !isMult6) {
+                            fontSize = 28;
+                            fontWeight = 'normal';
+                        } else {
+                            fontSize = 32;
+                            fontWeight = 'bold';
+                        }
+                        textOffset = 30;
+                    } else {
+                        textOffset = 30;
+                    }
+                    const halfLen = wholeTickLength * PHI_INV;
+                    const lenMajor = wholeTickLength;
+                    const lenMid = lenMajor - PHI_INV * (lenMajor - halfLen);
+                    const lenMinor = lenMid - PHI_INV * (lenMid - halfLen);
+                    if (scale < 18) {
+                        if (isMult12) tickLength = lenMajor;
+                        else if (isMult6 || isMult3) tickLength = lenMid;
+                        else tickLength = lenMinor;
+                    } else if (scale < 30 && !isMult6) {
+                        tickLength = lenMid;
+                    }
+                } else if (sixtyFourth % 32 === 0) {   // 1/2
+                    if (scale < 18) continue;
+                    const halfLen = wholeTickLength * PHI_INV;
+                    const quarterLen = wholeTickLength * PHI_INV ** 2;
+                    const halfInchNearest = Math.round(fraction);
+                    tickLength = (scale >= 18 && scale < 30 && halfInchNearest % 6 !== 0)
+                        ? halfLen - PHI_INV * (halfLen - quarterLen)
+                        : halfLen;
+                    if (scale >= 70) label = getFractionLabel(sixtyFourth);
+                    fontSize = scale <= 100 ? 24 : 28;
+                    fontWeight = scale < 800 ? 'normal' : 'bold';
+                } else if (sixtyFourth % 16 === 0) {   // 1/4
+                    if (scale < 20) continue;
+                    tickLength = wholeTickLength * PHI_INV ** 2;
+                    if (scale >= 80) label = getFractionLabel(sixtyFourth);
+                    fontSize = scale < 100 ? 16 : 24;
+                } else if (sixtyFourth % 8 === 0) {    // 1/8
+                    if (scale <= 25) continue;
+                    tickLength = wholeTickLength * PHI_INV ** 3;
+                    if (scale > 200) label = getFractionLabel(sixtyFourth);
+                    fontSize = scale <= 300 ? 16 : 20;
+                } else if (sixtyFourth % 4 === 0) {    // 1/16
+                    if (scale <= 50) continue;
+                    tickLength = wholeTickLength * PHI_INV ** 4;
+                    if (scale >= 400) label = getFractionLabel(sixtyFourth);
+                    fontSize = 18;
+                } else if (sixtyFourth % 2 === 0) {    // 1/32
+                    if (scale <= 100) continue;
+                    tickLength = wholeTickLength * PHI_INV ** 5;
+                    if (scale >= 800) label = getFractionLabel(sixtyFourth);
+                    fontSize = scale < 1000 ? 12 : 16;
+                } else {                               // 1/64
+                    tickLength = wholeTickLength * PHI_INV ** 6;
+                    if (scale >= 1000) label = getFractionLabel(sixtyFourth, true);
+                    fontSize = 12;
+                }
+
+                let color = highlight ? HIGHLIGHT_COLOR : '#000';
+                let displayLabel = label;
+
+                if (label && showThreads) {
+                    const thread = threadSizes.find(t => Math.abs(t.diameter - fraction) < 0.0001);
+                    if (thread && !thread.label.startsWith('#') && thread.tpis) {
+                        displayLabel = `${label} (${thread.tpis.join(', ')})`;
+                        color = highlight ? HIGHLIGHT_COLOR : 'blue';
+                    }
+                }
+
+                ctx.strokeStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(canvas.width / 2 + 2, yPos);
+                ctx.lineTo(canvas.width / 2 + 2 + tickLength, yPos);
+                ctx.stroke();
+
+                if (displayLabel) {
+                    ctx.font = `${fontWeight} ${fontSize}px Arial`;
+                    ctx.textAlign = 'left';
+                    ctx.fillStyle = color;
+                    const ty = isWhole ? yPos + 5 : yPos + 4;
+                    ctx.fillText(displayLabel, canvas.width / 2 + 2 + tickLength + textOffset, ty);
+                }
+            }
+
+            if (showGauges) {
+                drawGauges(startInch, endInch, startPixel, inputValueInches);
+            }
+
+            if (needBar) ctx.restore();
+
+            if (needBar) {
+                drawReadoutBanner(leftReadout, rightReadout);
+            } else if (leftReadout || rightReadout) {
+                drawReadoutChips(leftReadout, rightReadout);
+            }
+
+            updateHud();
+        }
+
+        function findNearestMmValue(mouseY, cursorX) {
+            if (cursorX >= canvas.width / 2) return null;
+            const rulerYInches = (mouseY + offsetY) / scale;
+            const rulerYmm = rulerYInches * MM_PER_INCH;
+            const step = scale < 50 ? 10 : scale <= 60 ? 10 : scale <= 100 ? 5 : scale <= 509 ? 1 : 0.2;
+            let nearest = Math.round(rulerYmm / step) * step;
+            if (nearest < 0) return null;
+            // Fix floating-point precision and remove trailing zeros
+            const fixed = nearest.toFixed(step === 0.2 ? 1 : 0);
+            return Number(fixed).toString();
+        }
+
+        function findNearestInchValue(mouseY, cursorX) {
+            if (cursorX < canvas.width / 2) return null;
+            const rulerYInches = (mouseY + offsetY) / scale;
+            let step = scale <= 60 ? 0.25 : scale <= 100 ? 0.125 : scale <= 240 ? 0.0625 : 1/64;
+            let nearest = Math.round(rulerYInches / step) * step;
+            let minDist = Math.abs(nearest - rulerYInches);
+            threadSizes.forEach(t => {
+                if (!showThreads && t.label.startsWith('#')) return;
+                const d = Math.abs(t.diameter - rulerYInches);
+                if (d < minDist) {
+                    minDist = d;
+                    nearest = t.diameter;
+                }
+            });
+            if (showGauges) {
+                currentGauges().forEach(g => {
+                    const d = Math.abs(g.inches - rulerYInches);
+                    if (d < minDist) {
+                        minDist = d;
+                        nearest = g.inches;
+                    }
+                });
+            }
+            return nearest >= 0 ? nearest.toString() : null;
+        }
+
+        canvas.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            lastPointerX = x;
+            lastPointerY = y;
+            inputSide = sideFromX(x);
+
+            const maxMm = 30 * TICK_SCALE;
+            const whole = wholeTickLength;
+            const leftB = canvas.width / 2 - maxMm;
+            const rightB = canvas.width / 2 + 2 + whole;
+
+            if (dragMode === 'create-selection' || dragMode === 'move-selection') {
+                canvas.style.cursor = 'ns-resize';
+            } else if (readoutHitAt(x, y)) {
+                canvas.style.cursor = 'pointer';
+            } else if (selection && isPointInSelection(x, y, selection)) {
+                canvas.style.cursor = 'ns-resize';
+            } else if (x >= leftB && x <= rightB) {
+                canvas.style.cursor = customCursorCSS;
+            } else {
+                canvas.style.cursor = isDragging ? 'grabbing' : 'grab';
+            }
+
+            if (isDragging) {
+                const dy = e.clientY - startY;
+                if (Math.abs(e.clientX - startX) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+                    mouseMoved = true;
+                }
+
+                if (dragMode === 'pan') {
+                    offsetY -= dy;
+                    clampZeroPosition();
+                    startX = e.clientX;
+                    startY = e.clientY;
+                } else if (dragMode === 'create-selection') {
+                    createEndInches = snapToSide(mouseToInches(y), sideFromX(x));
+                } else if (dragMode === 'move-selection' && moveOrigin) {
+                    const rawInches = mouseToInches(y);
+                    const delta = rawInches - moveGrabInches;
+                    const rawNewStart = moveOrigin.startInches + delta;
+                    const length = moveOrigin.endInches - moveOrigin.startInches;
+                    const snappedStart = snapToSide(rawNewStart, moveSnapSide);
+                    // Keep selection non-negative as much as possible
+                    let newStart = snappedStart;
+                    let newEnd = snappedStart + length;
+                    if (Math.min(newStart, newEnd) < 0) {
+                        const shift = -Math.min(newStart, newEnd);
+                        newStart += shift;
+                        newEnd += shift;
+                    }
+                    selection = { startInches: newStart, endInches: newEnd };
+                }
+            }
+            drawRuler();
+        });
+
+        canvas.addEventListener('mousedown', e => {
+            if (e.button !== 0) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            inputSide = sideFromX(x);
+
+            const copied = readoutHitAt(x, y);
+            if (copied) {
+                copyReadoutNumber(copied.number, copied.side);
+                isDragging = false;
+                dragMode = 'copy';
+                return;
+            }
+
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            mouseMoved = false;
+
+            // Priority: move existing selection → create selection on ticks → pan
+            if (selection && isPointInSelection(x, y, selection)) {
+                dragMode = 'move-selection';
+                moveSnapSide = sideFromX(x);
+                moveOrigin = { startInches: selection.startInches, endInches: selection.endInches };
+                moveGrabInches = mouseToInches(y);
+                // Clear point-input while selection is the active measurement
+                inputString = '';
+                inputSideWhenSet = null;
+            } else if (isInTickZone(x)) {
+                dragMode = 'create-selection';
+                const side = sideFromX(x);
+                createSnapSide = side;
+                lastPointerX = x;
+                lastPointerY = y;
+                createStartInches = snapToSide(mouseToInches(y), side);
+                createEndInches = createStartInches;
+                // Provisional: hide old selection while drawing a new one
+                selection = null;
+                inputString = '';
+                inputSideWhenSet = null;
+            } else {
+                dragMode = 'pan';
+            }
+        });
+
+        canvas.addEventListener('mouseup', e => {
+            const rect = canvas.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            const x = e.clientX - rect.left;
+
+            if (dragMode === 'copy') {
+                dragMode = null;
+                drawRuler();
+                return;
+            }
+
+            if (dragMode === 'create-selection') {
+                if (mouseMoved && createStartInches !== null && createEndInches !== null) {
+                    const len = Math.abs(createEndInches - createStartInches);
+                    if (len > 1e-12) {
+                        selection = {
+                            startInches: createStartInches,
+                            endInches: createEndInches
+                        };
+                    } else {
+                        selection = null;
+                    }
+                } else if (!mouseMoved) {
+                    // Single click on ticks: set point value (existing behavior)
+                    selection = null;
+                    const mmVal  = findNearestMmValue(y, x);
+                    const inchVal = findNearestInchValue(y, x);
+                    if (mmVal && x < canvas.width / 2) {
+                        inputSide = 'left';
+                        inputSideWhenSet = 'left';
+                        inputString = mmVal;
+                    } else if (inchVal && x >= canvas.width / 2) {
+                        inputSide = 'right';
+                        inputSideWhenSet = 'right';
+                        inputString = inchVal;
+                    }
+                }
+                createStartInches = null;
+                createEndInches = null;
+                createSnapSide = null;
+            } else if (dragMode === 'move-selection') {
+                // selection already updated during drag
+                moveOrigin = null;
+                moveGrabInches = null;
+                moveSnapSide = null;
+            } else if (dragMode === 'pan') {
+                // Click anywhere outside the highlighted area clears it
+                if (!mouseMoved && selection && !isPointInSelection(x, y, selection)) {
+                    clearTopValues();
+                }
+            }
+
+            isDragging = false;
+            mouseMoved = false;
+            dragMode = null;
+            drawRuler();
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            if (dragMode === 'create-selection' && mouseMoved &&
+                createStartInches !== null && createEndInches !== null) {
+                const len = Math.abs(createEndInches - createStartInches);
+                if (len > 1e-12) {
+                    selection = {
+                        startInches: createStartInches,
+                        endInches: createEndInches
+                    };
+                }
+            }
+            createStartInches = null;
+            createEndInches = null;
+            createSnapSide = null;
+            moveOrigin = null;
+            moveGrabInches = null;
+            moveSnapSide = null;
+            isDragging = false;
+            mouseMoved = false;
+            dragMode = null;
+            canvas.style.cursor = 'grab';
+            drawRuler();
+        });
+
+        canvas.addEventListener('wheel', e => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const my = e.clientY - rect.top;
+
+            if (e.ctrlKey) {
+                zoomByFactor(e.deltaY < 0 ? 1.1 : 0.9, my);
+            } else {
+                const trackpad = e.deltaMode === 0 && Math.abs(e.deltaY) < TRACKPAD_DELTA_THRESHOLD;
+                if (trackpad) {
+                    offsetY += e.deltaY;
+                } else {
+                    zoomByFactor(e.deltaY < 0 ? 1.1 : 0.9, my);
+                }
+            }
+            clampZeroPosition();
+            resnapCreateSelection();
+            drawRuler();
+        });
+
+        document.addEventListener('keydown', e => {
+            // Ignore if user is typing into another focused control
+            const typing = e.target && (
+                e.target.tagName === 'TEXTAREA' ||
+                (e.target.tagName === 'INPUT' &&
+                    !['radio', 'range', 'checkbox', 'button'].includes((e.target.type || '').toLowerCase()))
+            );
+            if (typing) {
+                if (e.key === 'Escape') {
+                    e.target.blur();
+                    setHelpOpen(false);
+                }
+                return;
+            }
+
+            const key = e.key.toLowerCase();
+
+            if (showHelp) {
+                if (e.key === 'Escape' || e.key === '?') {
+                    setHelpOpen(false);
+                    e.preventDefault();
+                }
+                return;
+            }
+
+            if (e.key === 'Escape') {
+                setHelpOpen(false);
+                return;
+            }
+
+            if (e.key === '?') {
+                setHelpOpen(true);
+                e.preventDefault();
+                return;
+            }
+
+            if (key === 'c') {
+                clearTopValues();
+                drawRuler();
+                return;
+            }
+
+            if (key === 'd') {
+                useDecimalInches = !useDecimalInches;
+                drawRuler();
+                return;
+            }
+
+            if (key === 'z') {
+                showZoomScale = !showZoomScale;
+                drawRuler();
+                return;
+            }
+
+            const isSpace = e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space';
+            if (isSpace) {
+                const onInches = inputSide === 'right' || inputSideWhenSet === 'right';
+                if (onInches && inputString !== '') {
+                    e.preventDefault();
+                    selection = null;
+                    createStartInches = null;
+                    createEndInches = null;
+                    inputSideWhenSet = 'right';
+                    if (!inputString.endsWith(' ')) {
+                        const v = parseInput(inputString);
+                        if (!isNaN(v)) {
+                            frozenMmReadout = formatNumber(v * MM_PER_INCH, 5) + ' mm';
+                        }
+                        inputString += ' ';
+                    }
+                }
+            } else if (/[0-9./]/.test(e.key)) {
+                // Typing a new point value clears any selection
+                selection = null;
+                createStartInches = null;
+                createEndInches = null;
+                if (inputString === '' || (inputSide !== inputSideWhenSet && !inputString.includes(' '))) {
+                    inputString = e.key;
+                    inputSideWhenSet = inputSide;
+                    frozenMmReadout = null;
+                } else {
+                    inputString += e.key;
+                }
+            } else if (e.key === 'Backspace') {
+                inputString = inputString.slice(0, -1);
+                if (!inputString.includes(' ')) frozenMmReadout = null;
+            } else if (e.key === 'Enter') {
+                const v = parseInput(inputString);
+                frozenMmReadout = null;
+                inputString = isNaN(v) ? '' : formatNumber(v, 6);
+            } else if (key === 't') {
+                showThreads = !showThreads;
+                if (showThreads) showGauges = false;
+                clampScaleToMode();
+            } else if (key === 'g') {
+                showGauges = !showGauges;
+                if (showGauges) showThreads = false;
+                clampScaleToMode();
+            }
+            drawRuler();
+        });
+
+        buildMaterialSlider();
+
+        materialSliderEl.addEventListener('change', e => {
+            if (e.target && e.target.name === 'gaugeMaterial') {
+                setGaugeMaterial(Number(e.target.value));
+                e.target.blur();
+            }
+        });
+
+        let materialDrag = false;
+        materialSliderEl.addEventListener('pointerdown', e => {
+            e.stopPropagation();
+            materialDrag = true;
+            materialSliderEl.setPointerCapture(e.pointerId);
+            setGaugeMaterial(materialIndexFromClientY(e.clientY));
+        });
+        materialSliderEl.addEventListener('pointermove', e => {
+            if (!materialDrag) return;
+            setGaugeMaterial(materialIndexFromClientY(e.clientY));
+        });
+        materialSliderEl.addEventListener('pointerup', () => { materialDrag = false; });
+        materialSliderEl.addEventListener('pointercancel', () => { materialDrag = false; });
+        materialSliderEl.addEventListener('mousedown', e => e.stopPropagation());
+        materialSliderEl.addEventListener('click', e => e.stopPropagation());
+
+        document.getElementById('hud').addEventListener('wheel', e => {
+            e.stopPropagation();
+        });
+
+        helpBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            setHelpOpen(!showHelp);
+        });
+        helpClose.addEventListener('click', e => {
+            e.stopPropagation();
+            setHelpOpen(false);
+        });
+        helpOverlay.addEventListener('click', e => {
+            if (e.target === helpOverlay) setHelpOpen(false);
+        });
+        helpPanel.addEventListener('click', e => e.stopPropagation());
+
+        const TIP_URLS = {
+            venmo: {
+                1: 'https://venmo.com/Erik-Goossens?txn=pay&amount=1&note=Vertical%20Ruler',
+                5: 'https://venmo.com/Erik-Goossens?txn=pay&amount=5&note=Vertical%20Ruler',
+                10: 'https://venmo.com/Erik-Goossens?txn=pay&amount=10&note=Vertical%20Ruler',
+                other: 'https://venmo.com/Erik-Goossens?txn=pay&note=Vertical%20Ruler'
+            },
+            paypal: {
+                1: 'https://www.paypal.me/fireshepherd/1',
+                5: 'https://www.paypal.me/fireshepherd/5',
+                10: 'https://www.paypal.me/fireshepherd/10',
+                other: 'https://www.paypal.me/fireshepherd'
+            }
+        };
+        const tipPay = document.getElementById('tipPay');
+        const tipToggle = document.getElementById('tipToggle');
+        function setTipPaypal(on) {
+            tipPay.classList.toggle('paypal', on);
+            tipToggle.setAttribute('aria-checked', on ? 'true' : 'false');
+            const urls = on ? TIP_URLS.paypal : TIP_URLS.venmo;
+            document.querySelectorAll('#tipButtons a.tip-btn').forEach(a => {
+                a.href = urls[a.dataset.amount];
+            });
+        }
+        setTipPaypal(false);
+        const tipThumb = tipToggle.querySelector('.tip-switch-thumb');
+        let tipDrag = null;
+
+        function tipThumbRestLeft(on, width) {
+            return on ? width / 2 : 2;
+        }
+
+        function endTipDrag(e) {
+            if (!tipDrag || e.pointerId !== tipDrag.pointerId) return;
+            const dx = e.clientX - tipDrag.startX;
+            const threshold = 0.3 * tipDrag.travel;
+            let on;
+            if (tipDrag.dragged && Math.abs(dx) >= threshold) {
+                if (!tipDrag.startOn && dx >= threshold) on = true;
+                else if (tipDrag.startOn && dx <= -threshold) on = false;
+                else on = tipDrag.startOn;
+            } else if (!tipDrag.dragged) {
+                const r = tipToggle.getBoundingClientRect();
+                on = (e.clientX - r.left) > r.width / 2;
+            } else {
+                on = tipDrag.startOn;
+            }
+            tipThumb.style.left = '';
+            tipToggle.classList.remove('dragging');
+            if (tipToggle.hasPointerCapture(e.pointerId)) {
+                tipToggle.releasePointerCapture(e.pointerId);
+            }
+            tipDrag = null;
+            setTipPaypal(on);
+        }
+
+        tipToggle.addEventListener('pointerdown', e => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            const r = tipToggle.getBoundingClientRect();
+            const startOn = tipPay.classList.contains('paypal');
+            tipDrag = {
+                pointerId: e.pointerId,
+                startX: e.clientX,
+                startOn,
+                width: r.width,
+                travel: r.width / 2 - 2,
+                dragged: false
+            };
+            tipToggle.classList.add('dragging');
+            tipToggle.setPointerCapture(e.pointerId);
+        });
+        tipToggle.addEventListener('pointermove', e => {
+            if (!tipDrag || e.pointerId !== tipDrag.pointerId) return;
+            const dx = e.clientX - tipDrag.startX;
+            if (Math.abs(dx) > 3) tipDrag.dragged = true;
+            if (!tipDrag.dragged) return;
+            const minLeft = 2;
+            const maxLeft = tipDrag.width / 2;
+            const base = tipThumbRestLeft(tipDrag.startOn, tipDrag.width);
+            const left = Math.max(minLeft, Math.min(maxLeft, base + dx));
+            tipThumb.style.left = left + 'px';
+        });
+        tipToggle.addEventListener('pointerup', endTipDrag);
+        tipToggle.addEventListener('pointercancel', endTipDrag);
+
+        drawRuler();
+    </script>
+</body>
+</html>
