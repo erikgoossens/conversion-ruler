@@ -2,18 +2,27 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vertical Ruler 9</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Vertical Ruler 10</title>
     <style>
+        html, body {
+            height: 100%;
+            height: 100dvh;
+            overscroll-behavior: none;
+        }
         body {
             margin: 0;
             background: #f0f0f0;
             font-family: Arial, sans-serif;
             overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
         }
         canvas {
             display: block;
             cursor: grab;
+            touch-action: none;
         }
 
         #hud {
@@ -37,11 +46,15 @@
             padding: 8px 12px 10px;
             min-width: 168px;
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+            box-sizing: border-box;
         }
         #gaugeMaterial.hidden {
             display: none;
         }
-        #gaugeMaterial .gauge-caption {
+        #materialMobile {
+            display: none;
+        }
+        #materialDesktop .gauge-caption {
             font-size: 11px;
             letter-spacing: 0.04em;
             text-transform: uppercase;
@@ -117,11 +130,76 @@
             outline-offset: 1px;
         }
 
+        #materialLabels {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 2px;
+            min-height: 22px;
+            margin-bottom: 2px;
+        }
+        .material-lab {
+            appearance: none;
+            border: none;
+            background: transparent;
+            font-family: Arial, sans-serif;
+            flex: 1 1 0;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            line-height: 1.15;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+            padding: 2px 1px 4px;
+        }
+        .material-lab.on {
+            flex: 1.6 1 0;
+            font-size: 16px;
+            font-weight: bold;
+            color: #0d7377;
+            text-decoration: underline;
+            text-decoration-color: #0d7377;
+            overflow: visible;
+        }
+        #materialTrack {
+            position: relative;
+            height: 26px;
+            cursor: pointer;
+            touch-action: none;
+        }
+        #materialLine {
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            top: 50%;
+            height: 2px;
+            background: #c5c5c5;
+            border-radius: 1px;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+        #materialThumb {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 56px;
+            height: 18px;
+            background: #0d7377;
+            border-radius: 10px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+        }
         #hudBottom {
             display: flex;
             align-items: center;
+            justify-content: flex-end;
             gap: 12px;
             pointer-events: none;
+            flex: 0 0 auto;
+            align-self: flex-end;
         }
         #zoomLabel {
             font-size: 28px;
@@ -132,7 +210,7 @@
         #zoomLabel.hidden {
             display: none;
         }
-        #helpBtn {
+        .hudBtn {
             pointer-events: auto;
             width: 40px;
             height: 40px;
@@ -149,15 +227,28 @@
             align-items: center;
             justify-content: center;
             padding: 0;
+            touch-action: manipulation;
+            font-family: Arial, sans-serif;
         }
-        #helpBtn:hover {
+        .hudBtn.active,
+        .hudBtn:active {
             background: #111;
             color: #fff;
             border-color: #111;
         }
-        #helpBtn:focus-visible {
+        @media (hover: hover) {
+            .hudBtn:hover {
+                background: #111;
+                color: #fff;
+                border-color: #111;
+            }
+        }
+        .hudBtn:focus-visible {
             outline: 3px solid #0d7377;
             outline-offset: 2px;
+        }
+        .hudBtn.hud-mode {
+            display: none;
         }
 
         #helpOverlay {
@@ -192,6 +283,7 @@
             min-height: 0;
             overflow-y: scroll;
             overscroll-behavior: contain;
+            touch-action: pan-y;
             padding-right: 4px;
             scrollbar-gutter: stable;
             scrollbar-width: thin;
@@ -282,6 +374,9 @@
         }
         #helpPanel li {
             margin: 6px 0;
+        }
+        .help-mobile {
+            display: none;
         }
         #helpTip {
             flex: 0 0 auto;
@@ -409,6 +504,166 @@
         a.tip-btn.other:hover {
             background: var(--tip-accent-wash);
         }
+
+        #measureBtn {
+            position: fixed;
+            z-index: 15;
+            display: none;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 18px;
+            font-size: 16px;
+            font-weight: bold;
+            font-family: Arial, sans-serif;
+            line-height: 1.2;
+            background: #d80000;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+            pointer-events: auto;
+            touch-action: manipulation;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        #measureBtn.visible {
+            display: block;
+        }
+        #keypadDisplay {
+            position: fixed;
+            z-index: 41;
+            display: none;
+            top: 0;
+            box-sizing: border-box;
+            background: #d8d8d8;
+            color: #000;
+            font-family: Arial, sans-serif;
+            font-size: 28px;
+            line-height: 1.1;
+            padding: 12px;
+            pointer-events: none;
+        }
+        #keypadDisplay.visible {
+            display: block;
+        }
+        #keypad {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 40;
+            display: none;
+            background: #e4e4e4;
+            padding: 8px 8px calc(10px + env(safe-area-inset-bottom, 0px));
+            box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+            user-select: none;
+            touch-action: manipulation;
+        }
+        #keypad.visible {
+            display: block;
+        }
+        #keypadKeys {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+        #keypadActions {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 6px;
+            max-width: 420px;
+            margin: 6px auto 0;
+        }
+        #keypad .key {
+            appearance: none;
+            border: none;
+            background: #fff;
+            color: #111;
+            font-size: 22px;
+            font-weight: bold;
+            font-family: Arial, sans-serif;
+            border-radius: 8px;
+            min-height: 46px;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+        }
+        #keypad .key:active {
+            background: #d8d8d8;
+        }
+        #keypad .key.wide {
+            grid-column: span 1;
+        }
+        #keypad .key.frac {
+            display: none;
+            font-size: 16px;
+        }
+        #keypad.inches .key.frac {
+            display: block;
+        }
+        #keypad .key.action {
+            font-size: 15px;
+            background: #cfcfcf;
+        }
+        #keypad .key.done {
+            background: #0d7377;
+            color: #fff;
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            canvas {
+                cursor: default;
+            }
+            #helpOverlay {
+                padding: 8px;
+                align-items: stretch;
+            }
+            #helpPanel {
+                padding: 20px 16px 16px;
+                width: 100%;
+                max-height: calc(100dvh - 16px);
+            }
+            #hud {
+                left: 8px;
+                right: 8px;
+                bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+                align-items: stretch;
+                gap: 8px;
+                max-height: 20vh;
+            }
+            #gaugeMaterial {
+                width: 100%;
+                min-width: 0;
+                padding: 8px 10px 6px;
+                border-radius: 12px;
+            }
+            #materialDesktop {
+                display: none;
+            }
+            #materialMobile {
+                display: block;
+            }
+            .hudBtn.hud-mode {
+                display: flex;
+            }
+            #hudBottom {
+                align-self: flex-end;
+                justify-content: flex-end;
+            }
+            .material-lab.on {
+                font-size: 15px;
+            }
+            .help-desktop {
+                display: none;
+            }
+            .help-mobile {
+                display: block;
+            }
+            #helpLegal {
+                text-align: left;
+            }
+        }
     </style>
 </head>
 <body>
@@ -416,12 +671,24 @@
 
     <div id="hud">
         <div id="gaugeMaterial" class="hidden">
-            <div class="gauge-caption">Sheet metal gauge</div>
-            <div id="materialSlider" role="radiogroup" aria-label="Gauge material"></div>
+            <div id="materialDesktop">
+                <div class="gauge-caption">Sheet metal gauge</div>
+                <div id="materialSlider" role="radiogroup" aria-label="Gauge material"></div>
+            </div>
+            <div id="materialMobile">
+                <div id="materialLabels"></div>
+                <div id="materialTrack" role="slider" aria-label="Gauge material">
+                    <div id="materialLine"></div>
+                    <div id="materialThumb"></div>
+                </div>
+            </div>
         </div>
         <div id="hudBottom">
             <div id="zoomLabel" class="hidden">Zoom Scale: 1000</div>
-            <button type="button" id="helpBtn" aria-label="Show keyboard shortcuts and controls">?</button>
+            <button type="button" id="gaugeBtn" class="hudBtn hud-mode" aria-pressed="false" aria-label="Toggle sheet-metal gauges">G</button>
+            <button type="button" id="decimalBtn" class="hudBtn hud-mode" aria-pressed="false" aria-label="Toggle decimal inch labels">D</button>
+            <button type="button" id="threadBtn" class="hudBtn hud-mode" aria-pressed="false" aria-label="Toggle thread sizes">T</button>
+            <button type="button" id="helpBtn" class="hudBtn" aria-label="Show keyboard shortcuts and controls" aria-expanded="false">?</button>
         </div>
     </div>
 
@@ -431,6 +698,7 @@
             <div id="helpBody">
             <h2 id="helpTitle">Keyboard shortcuts &amp; controls</h2>
 
+            <div class="help-desktop">
             <h3>Shortcuts</h3>
             <table>
                 <tr><td class="k"><kbd>T</kbd></td><td>Threads: Show/hide thread sizes.</td></tr>
@@ -464,6 +732,39 @@
             </ul>
             </div>
 
+            <div class="help-mobile">
+            <h3>Controls</h3>
+            <ul>
+                <li>Use the G button to overlay metal gauge thicknesses</li>
+                <li>Use the D button to toggle decimal view of inches</li>
+                <li>Use the T button to overlay imperial thread sizes</li>
+            </ul>
+
+            <h3>Conversion</h3>
+            <ul>
+                <li>The left half of the ruler is millimeters; the right half is inches</li>
+                <li>Tap a tickmark on the ruler to load that value in inches and millimeters</li>
+                <li>Tap a conversion value in the upper left and right to copy it to clipboard</li>
+                <li>Tap+hold a conversion value in the upper left and right to type in a new one (you can do fractions like 1 5/8 on the inches side)</li>
+            </ul>
+
+            <h3>Measurement</h3>
+            <ul>
+                <li>Tap+hold on the ruler to select a value with the loupe</li>
+                <li>Tap “measure from here”</li>
+                <li>Tap+hold elsewhere on the ruler, and select “measure to here”</li>
+                <li>Drag the red bar to move it around. It will snap to the increments on the side that your finger is on.</li>
+                <li>Tap empty space to clear the measurement</li>
+            </ul>
+
+            <h3>Navigation</h3>
+            <ul>
+                <li>Drag to pan</li>
+                <li>Pinch to zoom</li>
+            </ul>
+            </div>
+            </div>
+
             <div id="helpTip">
                 <p>I hope this helps you navigate the <em>madness</em> of mixing metric and imperial 😂</p>
                 <p>If you love this tool and would like to leave me a tip, you have my sincere gratitude!</p>
@@ -484,7 +785,17 @@
                     </div>
                 </div>
             </div>
-            <div id="helpLegal">© 2026 Erik Goossens. Code released under the <a href="https://opensource.org/license/mit" target="_blank" rel="noopener noreferrer">MIT License</a> — feel free to mess with it, just please keep the attribution intact.&nbsp;&nbsp;&nbsp;v9</div>
+            <div id="helpLegal">© 2026 Erik Goossens. Code released under the <a href="https://opensource.org/license/mit" target="_blank" rel="noopener noreferrer">MIT License</a> — feel free to mess with it, just please keep the attribution intact. v10</div>
+        </div>
+    </div>
+
+    <button type="button" id="measureBtn">Measure from here</button>
+    <div id="keypadDisplay"></div>
+    <div id="keypad" aria-label="Number keypad">
+        <div id="keypadKeys"></div>
+        <div id="keypadActions">
+            <button type="button" class="key action" data-key="cancel">Cancel</button>
+            <button type="button" class="key action done" data-key="done">Done</button>
         </div>
     </div>
 
@@ -493,11 +804,26 @@
         const ctx = canvas.getContext('2d');
         const zoomLabelEl = document.getElementById('zoomLabel');
         const gaugeMaterialEl = document.getElementById('gaugeMaterial');
-        const materialSliderEl = document.getElementById('materialSlider');
+        const materialDesktopEl = document.getElementById('materialSlider');
+        const materialLabelsEl = document.getElementById('materialLabels');
+        const materialTrackEl = document.getElementById('materialTrack');
+        const materialThumbEl = document.getElementById('materialThumb');
         const helpBtn = document.getElementById('helpBtn');
+        const gaugeBtn = document.getElementById('gaugeBtn');
+        const decimalBtn = document.getElementById('decimalBtn');
+        const threadBtn = document.getElementById('threadBtn');
         const helpOverlay = document.getElementById('helpOverlay');
         const helpClose = document.getElementById('helpClose');
         const helpPanel = document.getElementById('helpPanel');
+        const measureBtn = document.getElementById('measureBtn');
+        const keypadEl = document.getElementById('keypad');
+        const keypadKeysEl = document.getElementById('keypadKeys');
+        const keypadDisplayEl = document.getElementById('keypadDisplay');
+        const mobileQuery = window.matchMedia('(hover: none) and (pointer: coarse)');
+
+        function isMobileUi() {
+            return mobileQuery.matches;
+        }
 
         let offsetY = 0;
         let scale = 1000;
@@ -517,8 +843,11 @@
         const GAUGE_COLOR = '#0d7377';
         const TRACKPAD_DELTA_THRESHOLD = 10;
         const READOUT_PAD = 20;
+        let readoutPad = READOUT_PAD;
+        let readoutFontPx = 48;
         const PAGE_BG = '#f0f0f0';
         const SIDE_DIM = 'rgba(0,0,0,0.1)';
+        const SIDE_DIM_SOLID = '#d8d8d8';
         const SELECTION_WIDTH = 64;
         const SELECTION_FILL = HIGHLIGHT_COLOR;
         const MIN_SCALE = 10;
@@ -556,9 +885,32 @@
         let moveOrigin = null;       // selection at start of move
         let moveGrabInches = null;   // world-Y (inches) at grab
 
-        // Imperial base — scaled up so full inch = 200 px
+        let mobileFromInches = null;
+        let pendingPick = null;
+        let loupeActive = false;
+        let loupeX = 0;
+        let loupeY = 0;
+        let loupeSnapInches = 0;
+        let loupeSide = 'right';
+        let holdTimer = null;
+        let touchMode = null;
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchLastY = 0;
+        let pinchStartDist = 0;
+        let pinchWorldY = 0;
+        let pinchStartScale = 0;
+        const loupeBuf = document.createElement('canvas');
+        const HOLD_MS = 400;
+        const HOLD_MOVE_PX = 14;
+        let keypadHoldSide = null;
+        let panSamples = [];
+        let panVel = 0;
+        let panCoastRaf = 0;
+
+        // Imperial base — scaled up so full inch = 200 px on desktop
         const baseTickLength = 200;
-        const wholeTickLength = baseTickLength;  // full-inch ticks = 200 pixels
+        let wholeTickLength = baseTickLength;
 
         // Custom cursor: thick horizontal line
         const cursorCanvas = document.createElement('canvas');
@@ -635,6 +987,7 @@
         const GAUGE_MATERIALS = [
             {
                 name: 'Steel',
+                short: 'S',
                 gauges: [
                     {ga: 3, inches: 0.2391}, {ga: 4, inches: 0.2242}, {ga: 5, inches: 0.2092},
                     {ga: 6, inches: 0.1943}, {ga: 7, inches: 0.1793}, {ga: 8, inches: 0.1644},
@@ -650,6 +1003,7 @@
             },
             {
                 name: 'Galvanized',
+                short: 'Gal',
                 gauges: [
                     {ga: 8, inches: 0.1681}, {ga: 9, inches: 0.1532}, {ga: 10, inches: 0.1382},
                     {ga: 11, inches: 0.1233}, {ga: 12, inches: 0.1084}, {ga: 13, inches: 0.0934},
@@ -662,7 +1016,8 @@
                 ]
             },
             {
-                name: 'Stainless',
+                name: 'Stainless Steel',
+                short: 'SS',
                 gauges: [
                     {ga: 3, inches: 0.2500}, {ga: 4, inches: 0.2344}, {ga: 5, inches: 0.2187},
                     {ga: 6, inches: 0.2031}, {ga: 7, inches: 0.1875}, {ga: 8, inches: 0.1719},
@@ -676,9 +1031,9 @@
                     {ga: 30, inches: 0.0125}
                 ]
             },
-            { name: 'Aluminum', gauges: BROWN_SHARPE_GAUGES },
-            { name: 'Brass',    gauges: BROWN_SHARPE_GAUGES },
-            { name: 'Copper',   gauges: BROWN_SHARPE_GAUGES }
+            { name: 'Aluminum', short: 'Al', gauges: BROWN_SHARPE_GAUGES },
+            { name: 'Brass',    short: 'B', gauges: BROWN_SHARPE_GAUGES },
+            { name: 'Copper',   short: 'Cu', gauges: BROWN_SHARPE_GAUGES }
         ];
 
         function currentGauges() {
@@ -709,17 +1064,58 @@
             clampZeroPosition();
         }
 
-        function setGaugeMaterial(index) {
-            const next = Math.max(0, Math.min(GAUGE_MATERIALS.length - 1, index));
-            gaugeMaterialIndex = next;
-            materialSliderEl.querySelectorAll('input[name="gaugeMaterial"]').forEach(r => {
+        function positionMaterialThumb() {
+            const lab = materialLabelsEl.children[gaugeMaterialIndex];
+            if (!lab || !materialTrackEl) return;
+            const track = materialTrackEl.getBoundingClientRect();
+            const lr = lab.getBoundingClientRect();
+            if (!track.width) return;
+            const cx = lr.left + lr.width / 2 - track.left;
+            const w = Math.max(48, Math.min(lr.width + 20, track.width * 0.3));
+            materialThumbEl.style.width = `${w}px`;
+            materialThumbEl.style.left = `${cx}px`;
+        }
+
+        function updateMaterialLabels() {
+            [...materialLabelsEl.children].forEach((lab, i) => {
+                const m = GAUGE_MATERIALS[i];
+                lab.textContent = i === gaugeMaterialIndex ? m.name : m.short;
+                lab.classList.toggle('on', i === gaugeMaterialIndex);
+            });
+            materialDesktopEl.querySelectorAll('input[name="gaugeMaterial"]').forEach(r => {
                 r.checked = Number(r.value) === gaugeMaterialIndex;
             });
+            requestAnimationFrame(positionMaterialThumb);
+        }
+
+        function setGaugeMaterial(index) {
+            const next = Math.max(0, Math.min(GAUGE_MATERIALS.length - 1, index));
+            if (next === gaugeMaterialIndex) {
+                positionMaterialThumb();
+                return;
+            }
+            gaugeMaterialIndex = next;
+            updateMaterialLabels();
             drawRuler();
         }
 
+        function materialIndexFromClientX(clientX) {
+            const labs = [...materialLabelsEl.children];
+            let best = 0;
+            let bestDist = Infinity;
+            labs.forEach((lab, i) => {
+                const r = lab.getBoundingClientRect();
+                const d = Math.abs(clientX - (r.left + r.width / 2));
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = i;
+                }
+            });
+            return best;
+        }
+
         function materialIndexFromClientY(clientY) {
-            const options = [...materialSliderEl.querySelectorAll('.material-option')];
+            const options = [...materialDesktopEl.querySelectorAll('.material-option')];
             let best = 0;
             let bestDist = Infinity;
             options.forEach((opt, i) => {
@@ -734,7 +1130,8 @@
         }
 
         function buildMaterialSlider() {
-            materialSliderEl.innerHTML = '';
+            materialDesktopEl.innerHTML = '';
+            materialLabelsEl.innerHTML = '';
             GAUGE_MATERIALS.forEach((m, i) => {
                 const label = document.createElement('label');
                 label.className = 'material-option';
@@ -748,30 +1145,89 @@
                 stop.setAttribute('aria-hidden', 'true');
                 const name = document.createElement('span');
                 name.className = 'material-name';
-                name.textContent = m.name;
+                name.textContent = m.name === 'Stainless Steel' ? 'Stainless' : m.name;
                 label.appendChild(input);
                 label.appendChild(stop);
                 label.appendChild(name);
-                materialSliderEl.appendChild(label);
+                materialDesktopEl.appendChild(label);
+
+                const lab = document.createElement('button');
+                lab.type = 'button';
+                lab.className = 'material-lab' + (i === gaugeMaterialIndex ? ' on' : '');
+                lab.textContent = i === gaugeMaterialIndex ? m.name : m.short;
+                lab.addEventListener('click', e => {
+                    e.stopPropagation();
+                    setGaugeMaterial(i);
+                });
+                materialLabelsEl.appendChild(lab);
             });
+            requestAnimationFrame(positionMaterialThumb);
+        }
+
+        function viewportSize() {
+            const vv = window.visualViewport;
+            if (isMobileUi() && vv) {
+                return { w: Math.round(vv.width), h: Math.round(vv.height) };
+            }
+            return { w: window.innerWidth, h: window.innerHeight };
+        }
+
+        function layoutTickLengths() {
+            if (!isMobileUi()) {
+                wholeTickLength = baseTickLength;
+                return;
+            }
+            const halfW = canvas.width / 2 - 12;
+            // Fit whole-inch tick + offset + label, and 1/2" tick + label
+            const maxFromWhole = halfW - 30 - 44;
+            const maxFromHalf = (halfW - 10 - 56) / PHI_INV;
+            wholeTickLength = Math.max(72, Math.min(baseTickLength,
+                Math.floor(Math.min(maxFromWhole, maxFromHalf))));
         }
 
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            const { w, h } = viewportSize();
+            canvas.width = w;
+            canvas.height = h;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            layoutTickLengths();
             clampZeroPosition();
             drawRuler();
+            requestAnimationFrame(positionMaterialThumb);
         }
 
         const READOUT_PROXIMITY = 20;
         let readoutBarActive = false;
 
+        function mmDec() { return isMobileUi() ? 2 : 5; }
+        function inDec() { return isMobileUi() ? 3 : 6; }
+
+        function chooseReadoutFont(leftText, rightText) {
+            if (!isMobileUi()) {
+                readoutFontPx = 48;
+                readoutPad = READOUT_PAD;
+                return;
+            }
+            readoutPad = 12;
+            let size = Math.min(28, Math.max(16, Math.round(canvas.width / 13)));
+            const gap = 14;
+            while (size >= 14) {
+                ctx.font = `${size}px Arial`;
+                const lw = leftText ? ctx.measureText(leftText).width : 0;
+                const rw = rightText ? ctx.measureText(rightText).width : 0;
+                if (lw + rw + readoutPad * 4 + gap <= canvas.width) break;
+                size -= 1;
+            }
+            readoutFontPx = size;
+        }
+
         function getReadoutBannerHeight() {
-            ctx.font = '48px Arial';
+            ctx.font = `${readoutFontPx}px Arial`;
             const m = ctx.measureText('0 mm');
-            const ascent = m.actualBoundingBoxAscent || 43;
-            const descent = m.actualBoundingBoxDescent || 10;
-            return READOUT_PAD + ascent + descent + READOUT_PAD;
+            const ascent = m.actualBoundingBoxAscent || Math.round(readoutFontPx * 0.9);
+            const descent = m.actualBoundingBoxDescent || Math.round(readoutFontPx * 0.22);
+            return readoutPad + ascent + descent + readoutPad;
         }
 
         function zeroLabelClearance() {
@@ -788,14 +1244,14 @@
         }
 
         function readoutGlyphBox(text, side) {
-            ctx.font = '48px Arial';
+            ctx.font = `${readoutFontPx}px Arial`;
             const m = ctx.measureText(text);
-            const ascent = m.actualBoundingBoxAscent || 43;
-            const descent = m.actualBoundingBoxDescent || 10;
+            const ascent = m.actualBoundingBoxAscent || Math.round(readoutFontPx * 0.9);
+            const descent = m.actualBoundingBoxDescent || Math.round(readoutFontPx * 0.22);
             const w = m.width;
             const h = ascent + descent;
-            const y = READOUT_PAD;
-            const x = side === 'left' ? READOUT_PAD : canvas.width - READOUT_PAD - w;
+            const y = readoutPad;
+            const x = side === 'left' ? readoutPad : canvas.width - readoutPad - w;
             return { x, y, w, h };
         }
 
@@ -869,19 +1325,102 @@
             return false;
         }
 
+        function topLimit() {
+            return -zeroTopMargin();
+        }
+
         function clampZeroPosition() {
-            const min = -zeroTopMargin();
-            if (offsetY < min) {
-                offsetY = min;
+            const min = topLimit();
+            if (offsetY < min) offsetY = min;
+        }
+
+        function applyPanDelta(dFingerY) {
+            const min = topLimit();
+            let dOff = -dFingerY;
+            if (dOff < 0 && (offsetY < min || offsetY + dOff < min)) {
+                const over = Math.max(0, min - Math.min(offsetY, min));
+                const dim = Math.max(280, canvas.height * 0.55);
+                dOff *= 1 / (1 + over / (dim * 0.38));
             }
+            offsetY += dOff;
+        }
+
+        function stopPanCoast() {
+            if (panCoastRaf) {
+                cancelAnimationFrame(panCoastRaf);
+                panCoastRaf = 0;
+            }
+            panVel = 0;
+            panSamples = [];
+        }
+
+        function recordPanSample(y) {
+            const t = performance.now();
+            panSamples.push({ t, y });
+            while (panSamples.length > 1 && t - panSamples[0].t > 90) panSamples.shift();
+        }
+
+        function startPanCoast() {
+            let vel = 0;
+            if (panSamples.length >= 2) {
+                const a = panSamples[0];
+                const b = panSamples[panSamples.length - 1];
+                const dt = b.t - a.t;
+                if (dt >= 12) vel = -(b.y - a.y) / dt;
+            }
+            panSamples = [];
+            const min = topLimit();
+            const overscrolled = offsetY < min - 0.5;
+            if (Math.abs(vel) < 0.08 && !overscrolled) return;
+            panVel = Math.max(-3.2, Math.min(3.2, vel));
+            if (overscrolled) panVel *= 0.45;
+            let last = performance.now();
+            const tick = now => {
+                const dt = Math.min(34, now - last);
+                last = now;
+                const limit = topLimit();
+                if (offsetY < limit) {
+                    const omega = 0.013;
+                    const zeta = 0.9;
+                    const x = offsetY - limit;
+                    panVel += (-omega * omega * x - 2 * zeta * omega * panVel) * dt;
+                    offsetY += panVel * dt;
+                    if (offsetY >= limit && panVel > -0.02) {
+                        offsetY = limit;
+                        panVel = 0;
+                        panCoastRaf = 0;
+                        drawRuler();
+                        return;
+                    }
+                } else {
+                    panVel *= Math.exp(-dt / 340);
+                    offsetY += panVel * dt;
+                    if (offsetY >= limit && Math.abs(panVel) < 0.035) {
+                        panVel = 0;
+                        panCoastRaf = 0;
+                        drawRuler();
+                        return;
+                    }
+                }
+                drawRuler();
+                panCoastRaf = requestAnimationFrame(tick);
+            };
+            panCoastRaf = requestAnimationFrame(tick);
         }
 
         window.addEventListener('resize', resizeCanvas);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', resizeCanvas);
+        }
 
         function initializeView() {
             scale = 1000;
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            const { w, h } = viewportSize();
+            canvas.width = w;
+            canvas.height = h;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            layoutTickLengths();
             offsetY = -zeroTopMargin();
             drawRuler();
         }
@@ -907,6 +1446,23 @@
                 "3/4","25/32","13/16","27/32","7/8","29/32","15/16","31/32"
             ];
             return fractions[thirtySeconds] || "";
+        }
+
+        function formatInchReadout(inches) {
+            if (useDecimalInches) return `${formatNumber(inches, inDec())} in`;
+            const total = Math.round(Math.abs(inches) * 64);
+            const sign = inches < 0 ? '-' : '';
+            let whole = Math.floor(total / 64);
+            let rem = total % 64;
+            if (rem === 0) return `${sign}${whole} in`;
+            let n = rem;
+            let d = 64;
+            while (n % 2 === 0 && d % 2 === 0) {
+                n /= 2;
+                d /= 2;
+            }
+            if (whole === 0) return `${sign}${n}/${d} in`;
+            return `${sign}${whole} ${n}/${d} in`;
         }
 
         function parseInput(str) {
@@ -948,6 +1504,10 @@
             inputString = '';
             inputSideWhenSet = null;
             frozenMmReadout = null;
+            mobileFromInches = null;
+            pendingPick = null;
+            loupeActive = false;
+            hideMeasureBtn();
         }
 
         function mouseToInches(mouseY) {
@@ -1076,8 +1636,10 @@
         function isPointInSelection(x, y, sel) {
             const b = getSelectionPixelBounds(sel);
             if (!b) return false;
-            // Expand hit area slightly vertically for zero-thickness edge cases
-            return x >= b.left && x <= b.right && y >= b.top - 2 && y <= b.bottom + 2;
+            const extraX = isMobileUi() ? 28 : 0;
+            const extraY = isMobileUi() ? 10 : 2;
+            return x >= b.left - extraX && x <= b.right + extraX &&
+                y >= b.top - extraY && y <= b.bottom + extraY;
         }
 
         function drawSelectionHighlight(sel) {
@@ -1092,10 +1654,146 @@
             ctx.fillRect(b.left, b.top, SELECTION_WIDTH, b.bottom - b.top);
         }
 
+        function hideMeasureBtn() {
+            measureBtn.classList.remove('visible');
+        }
+
+        function canvasTouchPoint(touch) {
+            const rect = canvas.getBoundingClientRect();
+            return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+        }
+
+        function touchDistance(t0, t1) {
+            return Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+        }
+
+        function cancelHoldTimer() {
+            if (holdTimer) {
+                clearTimeout(holdTimer);
+                holdTimer = null;
+            }
+        }
+
+        function setLoupeFromPoint(x, y) {
+            loupeX = x;
+            loupeY = y;
+            loupeSide = sideFromX(x);
+            loupeSnapInches = snapToSide(mouseToInches(y), loupeSide);
+            lastPointerX = x;
+            lastPointerY = y;
+            inputSide = loupeSide;
+        }
+
+        function positionMeasureBtn() {
+            if (!pendingPick || !measureBtn.classList.contains('visible')) return;
+            const y = inchesToPixelY(pendingPick.inches);
+            const rect = canvas.getBoundingClientRect();
+            const btnH = measureBtn.offsetHeight || 48;
+            let top = rect.top + y + 20;
+            if (top + btnH > window.innerHeight - 12) top = rect.top + y - 20 - btnH;
+            if (top < 8) top = 8;
+            measureBtn.style.top = `${top}px`;
+        }
+
+        function showMeasureBtnForPick(pick) {
+            pendingPick = pick;
+            measureBtn.textContent = mobileFromInches == null ? 'Measure from here' : 'Measure to here';
+            measureBtn.classList.add('visible');
+            positionMeasureBtn();
+        }
+
+        function drawMobileFromMarker() {
+            if (mobileFromInches == null || selection) return;
+            const y = inchesToPixelY(mobileFromInches);
+            const cx = canvas.width / 2;
+            ctx.strokeStyle = HIGHLIGHT_COLOR;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cx - SELECTION_WIDTH, y);
+            ctx.lineTo(cx + SELECTION_WIDTH, y);
+            ctx.stroke();
+            ctx.lineWidth = TICK_LINE_WIDTH;
+        }
+
+        function drawLoupe() {
+            if (!loupeActive) return;
+            const snapY = inchesToPixelY(loupeSnapInches);
+            ctx.save();
+            ctx.strokeStyle = HIGHLIGHT_COLOR;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, snapY);
+            ctx.lineTo(canvas.width, snapY);
+            ctx.stroke();
+            ctx.restore();
+
+            if (loupeBuf.width !== canvas.width || loupeBuf.height !== canvas.height) {
+                loupeBuf.width = canvas.width;
+                loupeBuf.height = canvas.height;
+            }
+            const bctx = loupeBuf.getContext('2d');
+            bctx.clearRect(0, 0, loupeBuf.width, loupeBuf.height);
+            bctx.drawImage(canvas, 0, 0);
+
+            const r = Math.max(84, Math.min(120, canvas.width * 0.3));
+            const mag = 2.4;
+            const srcR = r / mag;
+            let lx = loupeX;
+            let ly = loupeY - r - 28;
+            if (ly < r + 8) ly = loupeY + r + 28;
+            lx = Math.max(r + 8, Math.min(canvas.width - r - 8, lx));
+            ly = Math.max(r + 8, Math.min(canvas.height - r - 8, ly));
+
+            const sx = loupeX - srcR;
+            const sy = snapY - srcR;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(lx, ly, r, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(loupeBuf, sx, sy, srcR * 2, srcR * 2, lx - r, ly - r, r * 2, r * 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.beginPath();
+            ctx.arc(lx, ly, r, 0, Math.PI * 2);
+            ctx.fill();
+            const loupeText = loupeSide === 'left'
+                ? `${formatNumber(loupeSnapInches * MM_PER_INCH, mmDec())} mm`
+                : formatInchReadout(loupeSnapInches);
+            let fontPx = Math.max(readoutFontPx + 8, 34);
+            ctx.font = `bold ${fontPx}px Arial`;
+            while (fontPx > 16 && ctx.measureText(loupeText).width > r * 1.55) {
+                fontPx -= 1;
+                ctx.font = `bold ${fontPx}px Arial`;
+            }
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(loupeText, lx, ly);
+            ctx.restore();
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(lx, ly, r, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+        }
+
         function updateHud() {
             zoomLabelEl.textContent = `Zoom Scale: ${Math.round(scale)}`;
             zoomLabelEl.classList.toggle('hidden', !showZoomScale);
             gaugeMaterialEl.classList.toggle('hidden', !showGauges);
+            if (showGauges) requestAnimationFrame(positionMaterialThumb);
+            gaugeBtn.classList.toggle('active', showGauges);
+            gaugeBtn.setAttribute('aria-pressed', showGauges ? 'true' : 'false');
+            decimalBtn.classList.toggle('active', useDecimalInches);
+            decimalBtn.setAttribute('aria-pressed', useDecimalInches ? 'true' : 'false');
+            threadBtn.classList.toggle('active', showThreads);
+            threadBtn.setAttribute('aria-pressed', showThreads ? 'true' : 'false');
+            helpBtn.classList.toggle('active', showHelp);
         }
 
         function fillSideRect(x, y, w, h, side) {
@@ -1116,13 +1814,136 @@
         }
 
         function readoutHitAt(x, y) {
+            const slop = isMobileUi() ? 14 : 0;
             for (const side of ['left', 'right']) {
                 const b = readoutHits[side];
-                if (b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                if (b && x >= b.x - slop && x <= b.x + b.w + slop &&
+                    y >= b.y - slop && y <= b.y + b.h + slop) {
                     return { side, number: b.number };
                 }
             }
             return null;
+        }
+
+        function readoutSideAt(x, y) {
+            const hit = readoutHitAt(x, y);
+            if (hit) return hit.side;
+            if (!isMobileUi()) return null;
+            const band = Math.max(52, (readoutPad + readoutFontPx + readoutPad));
+            if (y <= band) return x < canvas.width / 2 ? 'left' : 'right';
+            return null;
+        }
+
+        let keypadBackup = null;
+        let keypadFresh = false;
+
+        function keypadIsOpen() {
+            return keypadEl.classList.contains('visible');
+        }
+
+        function updateKeypadDisplay() {
+            const unit = inputSideWhenSet === 'left' ? 'mm' : 'in';
+            keypadDisplayEl.textContent = inputString === '' ? '' : `${inputString} ${unit}`;
+            keypadDisplayEl.style.fontSize = `${readoutFontPx}px`;
+            keypadDisplayEl.style.left = inputSideWhenSet === 'left' ? '0' : '50%';
+            keypadDisplayEl.style.width = '50%';
+            keypadDisplayEl.style.textAlign = inputSideWhenSet === 'left' ? 'left' : 'right';
+        }
+
+        function closeMobileKeypad() {
+            keypadEl.classList.remove('visible');
+            keypadEl.classList.remove('inches');
+            keypadDisplayEl.classList.remove('visible');
+            keypadBackup = null;
+        }
+
+        function cancelMobileKeypad() {
+            if (!keypadIsOpen()) return;
+            if (keypadBackup) {
+                inputString = keypadBackup.inputString;
+                inputSideWhenSet = keypadBackup.inputSideWhenSet;
+                inputSide = keypadBackup.inputSide;
+                selection = keypadBackup.selection;
+                frozenMmReadout = keypadBackup.frozenMmReadout;
+            }
+            closeMobileKeypad();
+            drawRuler();
+        }
+
+        function commitMobileKeypad() {
+            if (!keypadIsOpen()) return;
+            const raw = inputString;
+            frozenMmReadout = null;
+            const v = parseInput(raw);
+            if (!raw.trim()) {
+                inputString = '';
+            } else if (isNaN(v)) {
+                inputString = raw;
+            } else {
+                const dec = inputSideWhenSet === 'left' ? mmDec() : inDec();
+                inputString = formatNumber(v, dec);
+            }
+            closeMobileKeypad();
+            drawRuler();
+        }
+
+        function openMobileKeypad(side) {
+            keypadBackup = {
+                inputString,
+                inputSideWhenSet,
+                inputSide,
+                selection,
+                frozenMmReadout
+            };
+            selection = null;
+            createStartInches = null;
+            createEndInches = null;
+            mobileFromInches = null;
+            pendingPick = null;
+            hideMeasureBtn();
+            loupeActive = false;
+            frozenMmReadout = null;
+            const hit = readoutHits[side];
+            const seed = (hit && hit.number) ? hit.number
+                : (inputString && inputSideWhenSet === side) ? inputString
+                : '';
+            inputSide = side;
+            inputSideWhenSet = side;
+            inputString = seed;
+            keypadFresh = seed !== '';
+            keypadEl.classList.add('visible');
+            keypadEl.classList.toggle('inches', side === 'right');
+            keypadDisplayEl.classList.add('visible');
+            updateKeypadDisplay();
+            drawRuler();
+        }
+
+        function keypadType(ch) {
+            if (ch === 'clear') {
+                inputString = '';
+                keypadFresh = false;
+                frozenMmReadout = null;
+            } else if (ch === 'back') {
+                if (keypadFresh) {
+                    inputString = '';
+                    keypadFresh = false;
+                } else {
+                    inputString = inputString.slice(0, -1);
+                }
+                if (!inputString.includes(' ')) frozenMmReadout = null;
+            } else {
+                if (keypadFresh) {
+                    inputString = '';
+                    keypadFresh = false;
+                }
+                if (ch === 'space') {
+                    if (!inputString.endsWith(' ')) inputString += ' ';
+                } else {
+                    inputString += ch;
+                }
+            }
+            updateKeypadDisplay();
+            drawRuler();
         }
 
         function copyReadoutNumber(num, side) {
@@ -1159,28 +1980,28 @@
         }
 
         function drawReadoutText(leftText, rightText) {
-            ctx.font = '48px Arial';
+            ctx.font = `${readoutFontPx}px Arial`;
             const m = ctx.measureText('0');
-            const ascent = m.actualBoundingBoxAscent || 43;
-            const textY = READOUT_PAD + ascent;
+            const ascent = m.actualBoundingBoxAscent || Math.round(readoutFontPx * 0.9);
+            const textY = readoutPad + ascent;
             ctx.fillStyle = '#000';
             const flash = Date.now() < copyFlashUntil;
             if (leftText) {
                 ctx.textAlign = 'left';
-                ctx.fillText(flash && copyFlashSide === 'left' ? 'Copied' : leftText, READOUT_PAD, textY);
+                ctx.fillText(flash && copyFlashSide === 'left' ? 'Copied' : leftText, readoutPad, textY);
             }
             if (rightText) {
                 ctx.textAlign = 'right';
-                ctx.fillText(flash && copyFlashSide === 'right' ? 'Copied' : rightText, canvas.width - READOUT_PAD, textY);
+                ctx.fillText(flash && copyFlashSide === 'right' ? 'Copied' : rightText, canvas.width - readoutPad, textY);
             }
         }
 
         function drawReadoutChips(leftText, rightText) {
-            const pad = READOUT_PAD;
-            ctx.font = '48px Arial';
+            const pad = readoutPad;
+            ctx.font = `${readoutFontPx}px Arial`;
             const m0 = ctx.measureText('0');
-            const ascent = m0.actualBoundingBoxAscent || 43;
-            const descent = m0.actualBoundingBoxDescent || 10;
+            const ascent = m0.actualBoundingBoxAscent || Math.round(readoutFontPx * 0.9);
+            const descent = m0.actualBoundingBoxDescent || Math.round(readoutFontPx * 0.22);
             const textY = pad + ascent;
             const boxH = ascent + descent + pad * 2;
             const flash = Date.now() < copyFlashUntil;
@@ -1202,10 +2023,38 @@
             }
         }
 
+        function toggleDecimal() {
+            useDecimalInches = !useDecimalInches;
+            drawRuler();
+        }
+
+        function toggleGauges() {
+            showGauges = !showGauges;
+            if (showGauges) showThreads = false;
+            clampScaleToMode();
+            drawRuler();
+        }
+
+        function toggleThreads() {
+            showThreads = !showThreads;
+            if (showThreads) showGauges = false;
+            clampScaleToMode();
+            drawRuler();
+        }
+
         function setHelpOpen(open) {
             showHelp = open;
             helpOverlay.classList.toggle('hidden', !showHelp);
             helpBtn.setAttribute('aria-expanded', showHelp ? 'true' : 'false');
+            helpBtn.classList.toggle('active', showHelp);
+            if (open) {
+                cancelHoldTimer();
+                keypadHoldSide = null;
+                loupeActive = false;
+                touchMode = null;
+                endMobileMove();
+                cancelMobileKeypad();
+            }
         }
 
         function gaugeLabelFits(yPos, placedYs) {
@@ -1285,8 +2134,8 @@
             const activeSelEarly = getActiveSelection();
             const selLenEarly = activeSelEarly ? Math.abs(activeSelEarly.endInches - activeSelEarly.startInches) : 0;
             if (activeSelEarly && selLenEarly > 1e-12) {
-                leftReadout = `${formatNumber(selLenEarly * MM_PER_INCH, 5)} mm`;
-                rightReadout = `${formatNumber(selLenEarly, 6)} in`;
+                leftReadout = `${formatNumber(selLenEarly * MM_PER_INCH, mmDec())} mm`;
+                rightReadout = `${formatNumber(selLenEarly, inDec())} in`;
             } else if (inputString) {
                 const unit = inputSideWhenSet === 'left' ? 'mm' : 'in';
                 const primary = `${inputString} ${unit}`;
@@ -1295,8 +2144,8 @@
                     converted = frozenMmReadout;
                 } else if (!isNaN(inputValue)) {
                     converted = inputSideWhenSet === 'left'
-                        ? formatNumber(inputValue / MM_PER_INCH, 6) + ' in'
-                        : formatNumber(inputValue * MM_PER_INCH, 5) + ' mm';
+                        ? formatNumber(inputValue / MM_PER_INCH, inDec()) + ' in'
+                        : formatNumber(inputValue * MM_PER_INCH, mmDec()) + ' mm';
                 }
                 if (inputSideWhenSet === 'left') {
                     leftReadout = primary;
@@ -1307,14 +2156,16 @@
                 }
             }
 
+            chooseReadoutFont(leftReadout, rightReadout);
+
             const readoutBoxes = [];
             if (leftReadout) readoutBoxes.push(readoutGlyphBox(leftReadout, 'left'));
             if (rightReadout) readoutBoxes.push(readoutGlyphBox(rightReadout, 'right'));
             const needBar = readoutBoxes.length > 0 &&
                 rulerNearReadouts(readoutBoxes, READOUT_PROXIMITY);
             readoutBarActive = needBar;
-            if (needBar) {
-                const minOff = -zeroTopMargin();
+            if (needBar && !panCoastRaf && dragMode !== 'pan' && touchMode !== 'pan') {
+                const minOff = topLimit();
                 if (offsetY < minOff) offsetY = minOff;
             }
             startInch = offsetY / scale - BUFFER;
@@ -1339,6 +2190,7 @@
 
             // Selection highlight — drawn behind tick marks
             drawSelectionHighlight(getActiveSelection());
+            drawMobileFromMarker();
 
             // ── Metric (left) ───────────────────────────────────────────────
             const minMm = Math.max(0, startInch * MM_PER_INCH);
@@ -1592,6 +2444,8 @@
                 drawReadoutChips(leftReadout, rightReadout);
             }
 
+            drawLoupe();
+            positionMeasureBtn();
             updateHud();
         }
 
@@ -1634,6 +2488,7 @@
         }
 
         canvas.addEventListener('mousemove', e => {
+            if (isMobileUi()) return;
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
@@ -1665,8 +2520,8 @@
                 }
 
                 if (dragMode === 'pan') {
-                    offsetY -= dy;
-                    clampZeroPosition();
+                    applyPanDelta(dy);
+                    recordPanSample(e.clientY);
                     startX = e.clientX;
                     startY = e.clientY;
                 } else if (dragMode === 'create-selection') {
@@ -1692,7 +2547,9 @@
         });
 
         canvas.addEventListener('mousedown', e => {
+            if (isMobileUi()) return;
             if (e.button !== 0) return;
+            stopPanCoast();
 
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -1739,6 +2596,7 @@
         });
 
         canvas.addEventListener('mouseup', e => {
+            if (isMobileUi()) return;
             const rect = canvas.getBoundingClientRect();
             const y = e.clientY - rect.top;
             const x = e.clientX - rect.left;
@@ -1787,6 +2645,8 @@
                 // Click anywhere outside the highlighted area clears it
                 if (!mouseMoved && selection && !isPointInSelection(x, y, selection)) {
                     clearTopValues();
+                } else if (mouseMoved) {
+                    startPanCoast();
                 }
             }
 
@@ -1797,6 +2657,7 @@
         });
 
         canvas.addEventListener('mouseleave', () => {
+            if (isMobileUi()) return;
             if (dragMode === 'create-selection' && mouseMoved &&
                 createStartInches !== null && createEndInches !== null) {
                 const len = Math.abs(createEndInches - createStartInches);
@@ -1807,6 +2668,7 @@
                     };
                 }
             }
+            const coast = dragMode === 'pan' && mouseMoved;
             createStartInches = null;
             createEndInches = null;
             createSnapSide = null;
@@ -1817,11 +2679,13 @@
             mouseMoved = false;
             dragMode = null;
             canvas.style.cursor = 'grab';
+            if (coast) startPanCoast();
             drawRuler();
         });
 
         canvas.addEventListener('wheel', e => {
             e.preventDefault();
+            stopPanCoast();
             const rect = canvas.getBoundingClientRect();
             const my = e.clientY - rect.top;
 
@@ -1838,6 +2702,373 @@
             clampZeroPosition();
             resnapCreateSelection();
             drawRuler();
+        });
+
+        function endMobileMove() {
+            moveOrigin = null;
+            moveGrabInches = null;
+            moveSnapSide = null;
+            dragMode = null;
+            isDragging = false;
+        }
+
+        function beginPinch(touches) {
+            cancelHoldTimer();
+            keypadHoldSide = null;
+            loupeActive = false;
+            stopPanCoast();
+            endMobileMove();
+            const t0 = touches[0];
+            const t1 = touches[1];
+            const p0 = canvasTouchPoint(t0);
+            const p1 = canvasTouchPoint(t1);
+            const midY = (p0.y + p1.y) / 2;
+            pinchStartDist = Math.max(1, touchDistance(t0, t1));
+            pinchStartScale = scale;
+            pinchWorldY = (midY + offsetY) / scale;
+            touchMode = 'pinch';
+            mouseMoved = true;
+        }
+
+        function updatePinch(touches) {
+            if (touches.length < 2) return;
+            const t0 = touches[0];
+            const t1 = touches[1];
+            const p0 = canvasTouchPoint(t0);
+            const p1 = canvasTouchPoint(t1);
+            const midY = (p0.y + p1.y) / 2;
+            const dist = Math.max(1, touchDistance(t0, t1));
+            const factor = dist / pinchStartDist;
+            const worldY = pinchWorldY;
+            scale = Math.max(MIN_SCALE, Math.min(maxScale(worldY), pinchStartScale * factor));
+            offsetY = worldY * scale - midY;
+            clampZeroPosition();
+        }
+
+        function applyMobileTap(x, y) {
+            const copied = readoutHitAt(x, y);
+            if (copied) {
+                copyReadoutNumber(copied.number, copied.side);
+                return;
+            }
+            if (pendingPick) {
+                pendingPick = null;
+                hideMeasureBtn();
+                drawRuler();
+                return;
+            }
+            if (selection && !isPointInSelection(x, y, selection)) {
+                clearTopValues();
+                drawRuler();
+                return;
+            }
+            if (!selection) {
+                const mmVal = findNearestMmValue(y, x);
+                const inchVal = findNearestInchValue(y, x);
+                if (mmVal && x < canvas.width / 2) {
+                    inputSide = 'left';
+                    inputSideWhenSet = 'left';
+                    inputString = mmVal;
+                    mobileFromInches = null;
+                } else if (inchVal && x >= canvas.width / 2) {
+                    inputSide = 'right';
+                    inputSideWhenSet = 'right';
+                    inputString = inchVal;
+                    mobileFromInches = null;
+                } else {
+                    clearTopValues();
+                }
+                drawRuler();
+            }
+        }
+
+        canvas.addEventListener('touchstart', e => {
+            if (!isMobileUi()) return;
+            e.preventDefault();
+            stopPanCoast();
+            if (showHelp) return;
+
+            if (e.touches.length >= 2) {
+                beginPinch(e.touches);
+                drawRuler();
+                return;
+            }
+
+            const p = canvasTouchPoint(e.touches[0]);
+            touchStartX = p.x;
+            touchStartY = p.y;
+            touchLastY = p.y;
+            lastPointerX = p.x;
+            lastPointerY = p.y;
+            inputSide = sideFromX(p.x);
+            mouseMoved = false;
+            keypadHoldSide = null;
+
+            if (keypadIsOpen()) {
+                return;
+            }
+
+            const readoutSide = readoutSideAt(p.x, p.y);
+            if (readoutSide) {
+                cancelHoldTimer();
+                loupeActive = false;
+                touchMode = 'readout-hold';
+                holdTimer = setTimeout(() => {
+                    holdTimer = null;
+                    if (touchMode !== 'readout-hold') return;
+                    keypadHoldSide = readoutSide;
+                    touchMode = 'keypad';
+                    if (navigator.vibrate) navigator.vibrate(12);
+                    openMobileKeypad(readoutSide);
+                }, HOLD_MS);
+                return;
+            }
+
+            if (selection && isPointInSelection(p.x, p.y, selection)) {
+                cancelHoldTimer();
+                loupeActive = false;
+                hideMeasureBtn();
+                pendingPick = null;
+                dragMode = 'move-selection';
+                touchMode = 'move';
+                isDragging = true;
+                moveSnapSide = sideFromX(p.x);
+                moveOrigin = { startInches: selection.startInches, endInches: selection.endInches };
+                moveGrabInches = mouseToInches(p.y);
+                inputString = '';
+                inputSideWhenSet = null;
+                drawRuler();
+                return;
+            }
+
+            touchMode = 'hold-wait';
+            cancelHoldTimer();
+            holdTimer = setTimeout(() => {
+                holdTimer = null;
+                if (touchMode !== 'hold-wait') return;
+                hideMeasureBtn();
+                pendingPick = null;
+                setLoupeFromPoint(lastPointerX, lastPointerY);
+                loupeActive = true;
+                touchMode = 'loupe';
+                if (navigator.vibrate) navigator.vibrate(12);
+                drawRuler();
+            }, HOLD_MS);
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', e => {
+            if (!isMobileUi()) return;
+            e.preventDefault();
+            if (keypadIsOpen() || touchMode === 'keypad') return;
+
+            if (e.touches.length >= 2) {
+                if (touchMode !== 'pinch') beginPinch(e.touches);
+                updatePinch(e.touches);
+                drawRuler();
+                return;
+            }
+
+            if (touchMode === 'pinch') return;
+
+            const p = canvasTouchPoint(e.touches[0]);
+            lastPointerX = p.x;
+            lastPointerY = p.y;
+            const dx = p.x - touchStartX;
+            const dy = p.y - touchStartY;
+            if (Math.abs(dx) > HOLD_MOVE_PX || Math.abs(dy) > HOLD_MOVE_PX) mouseMoved = true;
+
+            if (touchMode === 'hold-wait' || touchMode === 'readout-hold') {
+                if (mouseMoved) {
+                    cancelHoldTimer();
+                    keypadHoldSide = null;
+                    touchMode = 'pan';
+                    isDragging = true;
+                    dragMode = 'pan';
+                    panSamples = [];
+                    recordPanSample(p.y);
+                }
+            }
+
+            if (touchMode === 'pan') {
+                applyPanDelta(p.y - touchLastY);
+                touchLastY = p.y;
+                recordPanSample(p.y);
+            } else if (touchMode === 'move' && moveOrigin) {
+                const rawInches = mouseToInches(p.y);
+                const delta = rawInches - moveGrabInches;
+                const rawNewStart = moveOrigin.startInches + delta;
+                const length = moveOrigin.endInches - moveOrigin.startInches;
+                const side = sideFromX(p.x);
+                moveSnapSide = side;
+                const snappedStart = snapToSide(rawNewStart, side);
+                let newStart = snappedStart;
+                let newEnd = snappedStart + length;
+                if (Math.min(newStart, newEnd) < 0) {
+                    const shift = -Math.min(newStart, newEnd);
+                    newStart += shift;
+                    newEnd += shift;
+                }
+                selection = { startInches: newStart, endInches: newEnd };
+            } else if (touchMode === 'loupe') {
+                setLoupeFromPoint(p.x, p.y);
+            }
+
+            touchLastY = p.y;
+            drawRuler();
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', e => {
+            if (!isMobileUi()) return;
+            e.preventDefault();
+
+            if (touchMode === 'pinch') {
+                if (e.touches.length >= 2) {
+                    beginPinch(e.touches);
+                    drawRuler();
+                    return;
+                }
+                if (e.touches.length === 1) {
+                    const p = canvasTouchPoint(e.touches[0]);
+                    touchStartX = p.x;
+                    touchStartY = p.y;
+                    touchLastY = p.y;
+                    touchMode = 'pan';
+                    mouseMoved = true;
+                    drawRuler();
+                    return;
+                }
+                touchMode = null;
+                drawRuler();
+                return;
+            }
+
+            if (e.touches.length > 0) return;
+
+            cancelHoldTimer();
+
+            if (touchMode === 'readout-hold') {
+                keypadHoldSide = null;
+                touchMode = null;
+                endMobileMove();
+                applyMobileTap(touchStartX, touchStartY);
+                return;
+            }
+
+            if (touchMode === 'keypad') {
+                keypadHoldSide = null;
+                touchMode = null;
+                endMobileMove();
+                return;
+            }
+
+            if (touchMode === 'loupe') {
+                loupeActive = false;
+                const inches = loupeSnapInches;
+                showMeasureBtnForPick({
+                    inches,
+                    x: loupeX,
+                    side: loupeSide
+                });
+                touchMode = null;
+                endMobileMove();
+                drawRuler();
+                return;
+            }
+
+            if (touchMode === 'hold-wait' && !mouseMoved) {
+                applyMobileTap(touchStartX, touchStartY);
+                touchMode = null;
+                endMobileMove();
+                return;
+            }
+
+            if (touchMode === 'move') {
+                endMobileMove();
+                touchMode = null;
+                drawRuler();
+                return;
+            }
+
+            if (touchMode === 'pan' && !mouseMoved) {
+                applyMobileTap(touchStartX, touchStartY);
+            }
+
+            const coast = touchMode === 'pan' && mouseMoved;
+            endMobileMove();
+            touchMode = null;
+            loupeActive = false;
+            if (coast) startPanCoast();
+            drawRuler();
+        }, { passive: false });
+
+        canvas.addEventListener('touchcancel', e => {
+            if (!isMobileUi()) return;
+            cancelHoldTimer();
+            loupeActive = false;
+            endMobileMove();
+            touchMode = null;
+            drawRuler();
+        }, { passive: false });
+
+        canvas.addEventListener('contextmenu', e => {
+            if (isMobileUi()) e.preventDefault();
+        });
+
+        (function buildKeypad() {
+            const keys = [
+                ['1', '1'], ['2', '2'], ['3', '3'],
+                ['4', '4'], ['5', '5'], ['6', '6'],
+                ['7', '7'], ['8', '8'], ['9', '9'],
+                ['.', '.'], ['0', '0'], ['back', '⌫'],
+                ['clear', 'C', 'action'], ['space', 'space', 'frac'], ['/', '/', 'frac']
+            ];
+            keys.forEach(([id, label, extra]) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'key' + (extra ? ' ' + extra : '');
+                b.dataset.key = id;
+                b.textContent = label;
+                keypadKeysEl.appendChild(b);
+            });
+        })();
+
+        keypadEl.addEventListener('pointerdown', e => e.stopPropagation());
+        keypadEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: false });
+        keypadEl.addEventListener('click', e => {
+            const btn = e.target.closest('.key');
+            if (!btn) return;
+            e.preventDefault();
+            const k = btn.dataset.key;
+            if (k === 'cancel') cancelMobileKeypad();
+            else if (k === 'done') commitMobileKeypad();
+            else keypadType(k);
+        });
+
+        measureBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        measureBtn.addEventListener('click', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!pendingPick) return;
+            const inches = pendingPick.inches;
+            if (mobileFromInches == null) {
+                selection = null;
+                mobileFromInches = inches;
+                inputString = '';
+                inputSideWhenSet = null;
+            } else {
+                const len = Math.abs(inches - mobileFromInches);
+                if (len > 1e-12) {
+                    selection = { startInches: mobileFromInches, endInches: inches };
+                }
+                mobileFromInches = null;
+            }
+            pendingPick = null;
+            hideMeasureBtn();
+            drawRuler();
+        });
+
+        ['gesturestart', 'gesturechange', 'gestureend'].forEach(type => {
+            document.addEventListener(type, e => e.preventDefault(), { passive: false });
         });
 
         document.addEventListener('keydown', e => {
@@ -1883,8 +3114,7 @@
             }
 
             if (key === 'd') {
-                useDecimalInches = !useDecimalInches;
-                drawRuler();
+                toggleDecimal();
                 return;
             }
 
@@ -1931,20 +3161,18 @@
                 frozenMmReadout = null;
                 inputString = isNaN(v) ? '' : formatNumber(v, 6);
             } else if (key === 't') {
-                showThreads = !showThreads;
-                if (showThreads) showGauges = false;
-                clampScaleToMode();
+                toggleThreads();
+                return;
             } else if (key === 'g') {
-                showGauges = !showGauges;
-                if (showGauges) showThreads = false;
-                clampScaleToMode();
+                toggleGauges();
+                return;
             }
             drawRuler();
         });
 
         buildMaterialSlider();
 
-        materialSliderEl.addEventListener('change', e => {
+        materialDesktopEl.addEventListener('change', e => {
             if (e.target && e.target.name === 'gaugeMaterial') {
                 setGaugeMaterial(Number(e.target.value));
                 e.target.blur();
@@ -1952,25 +3180,52 @@
         });
 
         let materialDrag = false;
-        materialSliderEl.addEventListener('pointerdown', e => {
+        materialDesktopEl.addEventListener('pointerdown', e => {
             e.stopPropagation();
             materialDrag = true;
-            materialSliderEl.setPointerCapture(e.pointerId);
+            materialDesktopEl.setPointerCapture(e.pointerId);
             setGaugeMaterial(materialIndexFromClientY(e.clientY));
         });
-        materialSliderEl.addEventListener('pointermove', e => {
-            if (!materialDrag) return;
+        materialDesktopEl.addEventListener('pointermove', e => {
+            if (!materialDrag || isMobileUi()) return;
             setGaugeMaterial(materialIndexFromClientY(e.clientY));
         });
-        materialSliderEl.addEventListener('pointerup', () => { materialDrag = false; });
-        materialSliderEl.addEventListener('pointercancel', () => { materialDrag = false; });
-        materialSliderEl.addEventListener('mousedown', e => e.stopPropagation());
-        materialSliderEl.addEventListener('click', e => e.stopPropagation());
+        materialTrackEl.addEventListener('pointerdown', e => {
+            e.stopPropagation();
+            materialDrag = true;
+            materialTrackEl.setPointerCapture(e.pointerId);
+            setGaugeMaterial(materialIndexFromClientX(e.clientX));
+        });
+        materialTrackEl.addEventListener('pointermove', e => {
+            if (!materialDrag || !isMobileUi()) return;
+            setGaugeMaterial(materialIndexFromClientX(e.clientX));
+        });
+        const endMaterialDrag = () => { materialDrag = false; };
+        materialDesktopEl.addEventListener('pointerup', endMaterialDrag);
+        materialDesktopEl.addEventListener('pointercancel', endMaterialDrag);
+        materialTrackEl.addEventListener('pointerup', endMaterialDrag);
+        materialTrackEl.addEventListener('pointercancel', endMaterialDrag);
+        materialDesktopEl.addEventListener('mousedown', e => e.stopPropagation());
+        materialTrackEl.addEventListener('mousedown', e => e.stopPropagation());
+        gaugeMaterialEl.addEventListener('click', e => e.stopPropagation());
+        window.addEventListener('resize', () => requestAnimationFrame(positionMaterialThumb));
 
         document.getElementById('hud').addEventListener('wheel', e => {
             e.stopPropagation();
         });
 
+        gaugeBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            toggleGauges();
+        });
+        decimalBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            toggleDecimal();
+        });
+        threadBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            toggleThreads();
+        });
         helpBtn.addEventListener('click', e => {
             e.stopPropagation();
             setHelpOpen(!showHelp);
