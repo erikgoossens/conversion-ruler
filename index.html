@@ -699,12 +699,11 @@
             <h2 id="helpTitle">Keyboard shortcuts &amp; controls</h2>
 
             <div class="help-desktop">
-            <h3>Shortcuts</h3>
-            <table>
-                <tr><td class="k"><kbd>T</kbd></td><td>Threads: Show/hide thread sizes.</td></tr>
-                <tr><td class="k"><kbd>G</kbd></td><td>Gauge: Show/hide sheet-metal gauge thicknesses. Choose a metal with the selector in the bottom-right.</td></tr>
-                <tr><td class="k"><kbd>D</kbd></td><td>Decimal: Switch inch labels between fractions and decimals.</td></tr>
-            </table>
+            <h3>Navigation</h3>
+            <ul>
+                <li>Left-click and drag anywhere to pan the ruler.</li>
+                <li>Trackpad scroll pans. Mouse wheel, pinch, or Ctrl+scroll zooms.</li>
+            </ul>
 
             <h3>Conversion</h3>
             <ul>
@@ -720,24 +719,24 @@
 
             <h3>Measurement</h3>
             <ul>
-                <li>Click+Drag along the tick marks to stretch a red bar between two points. As you stretch it, the end will snap to the tick marks shown at the current zoom, on whichever side the pointer is currently on. You can zoom in or out while stretching a measurement. Its length is shown at the top in millimeters and inches.</li>
-                <li>Drag the red bar to move it. As you drag, it snaps to the nearest tick mark on the side you grabbed — millimeters on the left, inches on the right. With the gauge or threads overlays on, it also snaps to gauges and thread sizes.</li>
+                <li>Right-click and drag to stretch a red bar between two points. As you stretch it, the end will snap to the tick marks shown at the current zoom, on whichever side the pointer is currently on. You can zoom in or out while stretching a measurement. Its length is shown at the top in millimeters and inches.</li>
+                <li>Left- or right-click and drag the red bar to move it. The half you grab is the end that snaps — upper half snaps the top, lower half snaps the bottom — to millimeters on the left or inches on the right. With the gauge or threads overlays on, it also snaps to gauges and thread sizes.</li>
                 <li>Click empty space to clear the current measurement.</li>
             </ul>
 
-            <h3>Navigation</h3>
-            <ul>
-                <li>Drag near the sides of the window to pan the ruler.</li>
-                <li>Trackpad scroll pans. Mouse wheel, pinch, or Ctrl+scroll zooms.</li>
-            </ul>
+            <h3>Shortcuts</h3>
+            <table>
+                <tr><td class="k"><kbd>T</kbd></td><td>Threads: Show/hide thread sizes.</td></tr>
+                <tr><td class="k"><kbd>G</kbd></td><td>Gauge: Show/hide sheet-metal gauge thicknesses. Choose a metal with the selector in the bottom-right.</td></tr>
+                <tr><td class="k"><kbd>D</kbd></td><td>Decimal: Switch inch labels between fractions and decimals.</td></tr>
+            </table>
             </div>
 
             <div class="help-mobile">
-            <h3>Controls</h3>
+            <h3>Navigation</h3>
             <ul>
-                <li>Use the G button to overlay metal gauge thicknesses</li>
-                <li>Use the D button to toggle decimal view of inches</li>
-                <li>Use the T button to overlay imperial thread sizes</li>
+                <li>Drag to pan</li>
+                <li>Pinch to zoom</li>
             </ul>
 
             <h3>Conversion</h3>
@@ -753,14 +752,15 @@
                 <li>Tap+hold on the ruler to select a value with the loupe</li>
                 <li>Tap “measure from here”</li>
                 <li>Tap+hold elsewhere on the ruler, and select “measure to here”</li>
-                <li>Drag the red bar to move it around. It will snap to the increments on the side that your finger is on.</li>
+                <li>Drag the red bar to move it around. The half you grab is the end that snaps — upper half snaps the top, lower half snaps the bottom — to the increments on the side that your finger is on.</li>
                 <li>Tap empty space to clear the measurement</li>
             </ul>
 
-            <h3>Navigation</h3>
+            <h3>Shortcuts</h3>
             <ul>
-                <li>Drag to pan</li>
-                <li>Pinch to zoom</li>
+                <li>Use the G button to overlay metal gauge thicknesses</li>
+                <li>Use the D button to toggle decimal view of inches</li>
+                <li>Use the T button to overlay imperial thread sizes</li>
             </ul>
             </div>
             </div>
@@ -785,7 +785,7 @@
                     </div>
                 </div>
             </div>
-            <div id="helpLegal">© 2026 Erik Goossens. Code released under the <a href="https://opensource.org/license/mit" target="_blank" rel="noopener noreferrer">MIT License</a> — feel free to mess with it, just please keep the attribution intact. v10</div>
+            <div id="helpLegal">© 2026 Erik Goossens. Code released under the <a href="https://opensource.org/license/mit" target="_blank" rel="noopener noreferrer">MIT License</a> — feel free to mess with it, just please keep the attribution intact. v11</div>
         </div>
     </div>
 
@@ -866,9 +866,9 @@
         let showHelp = false;
         let showZoomScale = false;
         let useDecimalInches = false;
-        let readoutHits = { left: null, right: null };
+        let readoutHits = [];
         let copyFlashUntil = 0;
-        let copyFlashSide = null;
+        let copyFlashKey = null;
 
         // Selection between two tick marks (absolute inches on the ruler)
         // { startInches, endInches } — order preserved from create drag
@@ -884,6 +884,7 @@
         let moveSnapSide = null;
         let moveOrigin = null;       // selection at start of move
         let moveGrabInches = null;   // world-Y (inches) at grab
+        let moveGrabEnd = 'upper';   // 'upper' | 'lower' visual end used for snap
 
         let mobileFromInches = null;
         let pendingPick = null;
@@ -1199,11 +1200,12 @@
 
         const READOUT_PROXIMITY = 20;
         let readoutBarActive = false;
+        let readoutBounds = null;
 
         function mmDec() { return isMobileUi() ? 2 : 5; }
         function inDec() { return isMobileUi() ? 3 : 6; }
 
-        function chooseReadoutFont(leftText, rightText) {
+        function chooseReadoutFont(leftText, rightText, bounds) {
             if (!isMobileUi()) {
                 readoutFontPx = 48;
                 readoutPad = READOUT_PAD;
@@ -1212,22 +1214,53 @@
             readoutPad = 12;
             let size = Math.min(28, Math.max(16, Math.round(canvas.width / 13)));
             const gap = 14;
+            const extrasL = bounds ? [bounds.upperMm, bounds.lowerMm] : [];
+            const extrasR = bounds ? [bounds.upperIn, bounds.lowerIn] : [];
             while (size >= 14) {
                 ctx.font = `${size}px Arial`;
-                const lw = leftText ? ctx.measureText(leftText).width : 0;
-                const rw = rightText ? ctx.measureText(rightText).width : 0;
+                let lw = leftText ? ctx.measureText(leftText).width : 0;
+                let rw = rightText ? ctx.measureText(rightText).width : 0;
+                const bf = Math.max(11, Math.round(size * 0.62));
+                ctx.font = `${bf}px Arial`;
+                extrasL.forEach(t => { lw = Math.max(lw, ctx.measureText(t).width); });
+                extrasR.forEach(t => { rw = Math.max(rw, ctx.measureText(t).width); });
                 if (lw + rw + readoutPad * 4 + gap <= canvas.width) break;
                 size -= 1;
             }
             readoutFontPx = size;
         }
 
-        function getReadoutBannerHeight() {
+        function boundFontPx() {
+            return Math.max(11, Math.round(readoutFontPx * 0.62));
+        }
+
+        function readoutStackLayout(hasBounds) {
             ctx.font = `${readoutFontPx}px Arial`;
             const m = ctx.measureText('0 mm');
-            const ascent = m.actualBoundingBoxAscent || Math.round(readoutFontPx * 0.9);
-            const descent = m.actualBoundingBoxDescent || Math.round(readoutFontPx * 0.22);
-            return readoutPad + ascent + descent + readoutPad;
+            const mainAscent = m.actualBoundingBoxAscent || Math.round(readoutFontPx * 0.9);
+            const mainDescent = m.actualBoundingBoxDescent || Math.round(readoutFontPx * 0.22);
+            const mainH = mainAscent + mainDescent;
+            let boundAscent = 0;
+            let boundDescent = 0;
+            let boundH = 0;
+            let gap = 0;
+            let afterMain = 0;
+            const bf = boundFontPx();
+            if (hasBounds) {
+                ctx.font = `${bf}px Arial`;
+                const bm = ctx.measureText('0 mm');
+                boundAscent = bm.actualBoundingBoxAscent || Math.round(bf * 0.9);
+                boundDescent = bm.actualBoundingBoxDescent || Math.round(bf * 0.22);
+                boundH = boundAscent + boundDescent;
+                gap = Math.max(4, Math.round(readoutFontPx * 0.14));
+                afterMain = gap + 10;
+            }
+            const totalH = readoutPad + mainH + (hasBounds ? afterMain + boundH + gap + boundH : 0) + readoutPad;
+            return { mainAscent, mainDescent, mainH, boundAscent, boundDescent, boundH, gap, afterMain, bf, totalH };
+        }
+
+        function getReadoutBannerHeight() {
+            return readoutStackLayout(!!readoutBounds).totalH;
         }
 
         function zeroLabelClearance() {
@@ -1243,16 +1276,16 @@
             return clear;
         }
 
-        function readoutGlyphBox(text, side) {
+        function readoutGlyphBox(text, side, extraTexts) {
+            const extras = extraTexts || [];
+            const layout = readoutStackLayout(extras.length > 0);
             ctx.font = `${readoutFontPx}px Arial`;
-            const m = ctx.measureText(text);
-            const ascent = m.actualBoundingBoxAscent || Math.round(readoutFontPx * 0.9);
-            const descent = m.actualBoundingBoxDescent || Math.round(readoutFontPx * 0.22);
-            const w = m.width;
-            const h = ascent + descent;
-            const y = readoutPad;
-            const x = side === 'left' ? readoutPad : canvas.width - readoutPad - w;
-            return { x, y, w, h };
+            let w = text ? ctx.measureText(text).width : 0;
+            ctx.font = `${layout.bf}px Arial`;
+            extras.forEach(t => { w = Math.max(w, ctx.measureText(t).width); });
+            const boxW = w + readoutPad * 2;
+            const x = side === 'left' ? 0 : canvas.width - boxW;
+            return { x, y: 0, w: boxW, h: layout.totalH };
         }
 
         function rectsClose(a, b, gap) {
@@ -1637,9 +1670,61 @@
             const b = getSelectionPixelBounds(sel);
             if (!b) return false;
             const extraX = isMobileUi() ? 28 : 0;
-            const extraY = isMobileUi() ? 10 : 2;
+            const extraY = isMobileUi() ? 16 : 2;
             return x >= b.left - extraX && x <= b.right + extraX &&
                 y >= b.top - extraY && y <= b.bottom + extraY;
+        }
+
+        function visibleSelectionPixelBounds(sel) {
+            const b = getSelectionPixelBounds(sel);
+            if (!b) return null;
+            const extraY = isMobileUi() ? 16 : 2;
+            const clipTop = readoutBarActive ? getReadoutBannerHeight() : 0;
+            const top = Math.max(b.top - extraY, clipTop);
+            const bottom = Math.min(b.bottom + extraY, canvas.height);
+            if (bottom <= top) return { top: b.top, bottom: b.bottom, left: b.left, right: b.right };
+            return { top, bottom, left: b.left, right: b.right };
+        }
+
+        function beginMoveSelection(x, y) {
+            dragMode = 'move-selection';
+            moveSnapSide = sideFromX(x);
+            moveOrigin = { startInches: selection.startInches, endInches: selection.endInches };
+            moveGrabInches = mouseToInches(y);
+            const b = visibleSelectionPixelBounds(selection);
+            const mid = b ? (b.top + b.bottom) / 2 : y;
+            moveGrabEnd = y <= mid ? 'upper' : 'lower';
+            inputString = '';
+            inputSideWhenSet = null;
+        }
+
+        function applyMoveSelection(x, y) {
+            if (!moveOrigin) return;
+            const delta = mouseToInches(y) - moveGrabInches;
+            const top0 = Math.min(moveOrigin.startInches, moveOrigin.endInches);
+            const bot0 = Math.max(moveOrigin.startInches, moveOrigin.endInches);
+            const length = bot0 - top0;
+            const side = sideFromX(x);
+            moveSnapSide = side;
+            let newTop;
+            let newBot;
+            if (moveGrabEnd === 'upper') {
+                newTop = snapToSide(top0 + delta, side);
+                newBot = newTop + length;
+            } else {
+                newBot = snapToSide(bot0 + delta, side);
+                newTop = newBot - length;
+            }
+            if (newTop < 0) {
+                const shift = -newTop;
+                newTop += shift;
+                newBot += shift;
+            }
+            if (moveOrigin.startInches <= moveOrigin.endInches) {
+                selection = { startInches: newTop, endInches: newBot };
+            } else {
+                selection = { startInches: newBot, endInches: newTop };
+            }
         }
 
         function drawSelectionHighlight(sel) {
@@ -1809,17 +1894,19 @@
             return (text || '').replace(/\s*(mm|in)\s*$/i, '').trim();
         }
 
-        function setReadoutHit(side, x, y, w, h, text) {
-            readoutHits[side] = { x, y, w, h, number: numberFromReadout(text) };
+        function setReadoutHit(key, side, x, y, w, h, text) {
+            readoutHits.push({
+                key, side, x, y, w, h,
+                number: numberFromReadout(text)
+            });
         }
 
         function readoutHitAt(x, y) {
             const slop = isMobileUi() ? 14 : 0;
-            for (const side of ['left', 'right']) {
-                const b = readoutHits[side];
-                if (b && x >= b.x - slop && x <= b.x + b.w + slop &&
+            for (const b of readoutHits) {
+                if (x >= b.x - slop && x <= b.x + b.w + slop &&
                     y >= b.y - slop && y <= b.y + b.h + slop) {
-                    return { side, number: b.number };
+                    return b;
                 }
             }
             return null;
@@ -1903,7 +1990,8 @@
             hideMeasureBtn();
             loupeActive = false;
             frozenMmReadout = null;
-            const hit = readoutHits[side];
+            const hit = readoutHits.find(h => h.side === side && h.key === 'main')
+                || readoutHits.find(h => h.side === side);
             const seed = (hit && hit.number) ? hit.number
                 : (inputString && inputSideWhenSet === side) ? inputString
                 : '';
@@ -1946,9 +2034,9 @@
             drawRuler();
         }
 
-        function copyReadoutNumber(num, side) {
+        function copyReadoutNumber(num, key) {
             if (!num) return;
-            copyFlashSide = side;
+            copyFlashKey = key;
             const done = () => {
                 copyFlashUntil = Date.now() + 900;
                 drawRuler();
@@ -1970,56 +2058,83 @@
             }
         }
 
-        function drawReadoutBanner(leftText, rightText) {
+        function flashReadout(key, text) {
+            return Date.now() < copyFlashUntil && copyFlashKey === key ? 'Copied' : text;
+        }
+
+        function drawReadoutStack(side, mainText, extraTexts, boxX, boxW, fullHeight) {
+            const pad = readoutPad;
+            const extras = extraTexts || [];
+            const hasBounds = extras.length > 0;
+            const L = readoutStackLayout(hasBounds);
+            const left = side === 'left';
+            const tx = left ? boxX + pad : boxX + boxW - pad;
+            ctx.textAlign = left ? 'left' : 'right';
+            ctx.textBaseline = 'alphabetic';
+
+            const mainY = pad + L.mainAscent;
+            const mainBottom = pad + L.mainH;
+            ctx.font = `${readoutFontPx}px Arial`;
+            ctx.fillStyle = '#000';
+            if (mainText) {
+                ctx.fillText(flashReadout(`${side}-main`, mainText), tx, mainY);
+                setReadoutHit(`${side}-main`, side, boxX, 0, boxW,
+                    hasBounds ? mainBottom + L.afterMain / 2 : fullHeight, mainText);
+            }
+
+            if (!hasBounds) return;
+            ctx.font = `${L.bf}px Arial`;
+            ctx.fillStyle = HIGHLIGHT_COLOR;
+            const uY = pad + L.mainH + L.afterMain + L.boundAscent;
+            const uTop = mainBottom + L.afterMain / 2;
+            const uBot = pad + L.mainH + L.afterMain + L.boundH + L.gap / 2;
+            ctx.fillText(flashReadout(`${side}-upper`, extras[0]), tx, uY);
+            setReadoutHit(`${side}-upper`, side, boxX, uTop, boxW, uBot - uTop, extras[0]);
+            const lY = pad + L.mainH + L.afterMain + L.boundH + L.gap + L.boundAscent;
+            ctx.fillText(flashReadout(`${side}-lower`, extras[1]), tx, lY);
+            setReadoutHit(`${side}-lower`, side, boxX, uBot, boxW, fullHeight - uBot, extras[1]);
+        }
+
+        function drawReadoutBanner(leftText, rightText, bounds) {
             const bannerH = getReadoutBannerHeight();
             fillSideRect(0, 0, canvas.width / 2, bannerH, 'left');
             fillSideRect(canvas.width / 2, 0, canvas.width / 2, bannerH, 'right');
-            if (leftText) setReadoutHit('left', 0, 0, canvas.width / 2, bannerH, leftText);
-            if (rightText) setReadoutHit('right', canvas.width / 2, 0, canvas.width / 2, bannerH, rightText);
-            drawReadoutText(leftText, rightText);
-        }
-
-        function drawReadoutText(leftText, rightText) {
-            ctx.font = `${readoutFontPx}px Arial`;
-            const m = ctx.measureText('0');
-            const ascent = m.actualBoundingBoxAscent || Math.round(readoutFontPx * 0.9);
-            const textY = readoutPad + ascent;
-            ctx.fillStyle = '#000';
-            const flash = Date.now() < copyFlashUntil;
             if (leftText) {
-                ctx.textAlign = 'left';
-                ctx.fillText(flash && copyFlashSide === 'left' ? 'Copied' : leftText, readoutPad, textY);
+                drawReadoutStack('left', leftText,
+                    bounds ? [bounds.upperMm, bounds.lowerMm] : [],
+                    0, canvas.width / 2, bannerH);
             }
             if (rightText) {
-                ctx.textAlign = 'right';
-                ctx.fillText(flash && copyFlashSide === 'right' ? 'Copied' : rightText, canvas.width - readoutPad, textY);
+                drawReadoutStack('right', rightText,
+                    bounds ? [bounds.upperIn, bounds.lowerIn] : [],
+                    canvas.width / 2, canvas.width / 2, bannerH);
             }
         }
 
-        function drawReadoutChips(leftText, rightText) {
+        function drawReadoutChips(leftText, rightText, bounds) {
             const pad = readoutPad;
-            ctx.font = `${readoutFontPx}px Arial`;
-            const m0 = ctx.measureText('0');
-            const ascent = m0.actualBoundingBoxAscent || Math.round(readoutFontPx * 0.9);
-            const descent = m0.actualBoundingBoxDescent || Math.round(readoutFontPx * 0.22);
-            const textY = pad + ascent;
-            const boxH = ascent + descent + pad * 2;
-            const flash = Date.now() < copyFlashUntil;
+            const extrasL = bounds ? [bounds.upperMm, bounds.lowerMm] : [];
+            const extrasR = bounds ? [bounds.upperIn, bounds.lowerIn] : [];
+            const L = readoutStackLayout(!!bounds);
+            const boxH = L.totalH;
             if (leftText) {
-                const w = ctx.measureText(leftText).width;
-                fillSideRect(0, 0, w + pad * 2, boxH, 'left');
-                setReadoutHit('left', 0, 0, w + pad * 2, boxH, leftText);
-                ctx.fillStyle = '#000';
-                ctx.textAlign = 'left';
-                ctx.fillText(flash && copyFlashSide === 'left' ? 'Copied' : leftText, pad, textY);
+                ctx.font = `${readoutFontPx}px Arial`;
+                let w = ctx.measureText(leftText).width;
+                ctx.font = `${L.bf}px Arial`;
+                extrasL.forEach(t => { w = Math.max(w, ctx.measureText(t).width); });
+                const boxW = w + pad * 2;
+                fillSideRect(0, 0, boxW, boxH, 'left');
+                drawReadoutStack('left', leftText, extrasL, 0, boxW, boxH);
             }
             if (rightText) {
-                const w = ctx.measureText(rightText).width;
-                fillSideRect(canvas.width - w - pad * 2, 0, w + pad * 2, boxH, 'right');
-                setReadoutHit('right', canvas.width - w - pad * 2, 0, w + pad * 2, boxH, rightText);
-                ctx.fillStyle = '#000';
-                ctx.textAlign = 'right';
-                ctx.fillText(flash && copyFlashSide === 'right' ? 'Copied' : rightText, canvas.width - pad, textY);
+                ctx.font = `${readoutFontPx}px Arial`;
+                let w = ctx.measureText(rightText).width;
+                ctx.font = `${L.bf}px Arial`;
+                extrasR.forEach(t => { w = Math.max(w, ctx.measureText(t).width); });
+                const boxW = w + pad * 2;
+                const boxX = canvas.width - boxW;
+                fillSideRect(boxX, 0, boxW, boxH, 'right');
+                drawReadoutStack('right', rightText, extrasR, boxX, boxW, boxH);
             }
         }
 
@@ -2103,7 +2218,7 @@
         }
 
         function drawRuler() {
-            readoutHits = { left: null, right: null };
+            readoutHits = [];
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = PAGE_BG;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -2133,9 +2248,18 @@
             let rightReadout = '';
             const activeSelEarly = getActiveSelection();
             const selLenEarly = activeSelEarly ? Math.abs(activeSelEarly.endInches - activeSelEarly.startInches) : 0;
+            readoutBounds = null;
             if (activeSelEarly && selLenEarly > 1e-12) {
                 leftReadout = `${formatNumber(selLenEarly * MM_PER_INCH, mmDec())} mm`;
                 rightReadout = `${formatNumber(selLenEarly, inDec())} in`;
+                const upper = Math.min(activeSelEarly.startInches, activeSelEarly.endInches);
+                const lower = Math.max(activeSelEarly.startInches, activeSelEarly.endInches);
+                readoutBounds = {
+                    upperMm: `${formatNumber(upper * MM_PER_INCH, mmDec())} mm`,
+                    lowerMm: `${formatNumber(lower * MM_PER_INCH, mmDec())} mm`,
+                    upperIn: `${formatNumber(upper, inDec())} in`,
+                    lowerIn: `${formatNumber(lower, inDec())} in`
+                };
             } else if (inputString) {
                 const unit = inputSideWhenSet === 'left' ? 'mm' : 'in';
                 const primary = `${inputString} ${unit}`;
@@ -2156,11 +2280,17 @@
                 }
             }
 
-            chooseReadoutFont(leftReadout, rightReadout);
+            chooseReadoutFont(leftReadout, rightReadout, readoutBounds);
 
             const readoutBoxes = [];
-            if (leftReadout) readoutBoxes.push(readoutGlyphBox(leftReadout, 'left'));
-            if (rightReadout) readoutBoxes.push(readoutGlyphBox(rightReadout, 'right'));
+            if (leftReadout) {
+                readoutBoxes.push(readoutGlyphBox(leftReadout, 'left',
+                    readoutBounds ? [readoutBounds.upperMm, readoutBounds.lowerMm] : []));
+            }
+            if (rightReadout) {
+                readoutBoxes.push(readoutGlyphBox(rightReadout, 'right',
+                    readoutBounds ? [readoutBounds.upperIn, readoutBounds.lowerIn] : []));
+            }
             const needBar = readoutBoxes.length > 0 &&
                 rulerNearReadouts(readoutBoxes, READOUT_PROXIMITY);
             readoutBarActive = needBar;
@@ -2439,9 +2569,9 @@
             if (needBar) ctx.restore();
 
             if (needBar) {
-                drawReadoutBanner(leftReadout, rightReadout);
+                drawReadoutBanner(leftReadout, rightReadout, readoutBounds);
             } else if (leftReadout || rightReadout) {
-                drawReadoutChips(leftReadout, rightReadout);
+                drawReadoutChips(leftReadout, rightReadout, readoutBounds);
             }
 
             drawLoupe();
@@ -2527,20 +2657,7 @@
                 } else if (dragMode === 'create-selection') {
                     createEndInches = snapToSide(mouseToInches(y), sideFromX(x));
                 } else if (dragMode === 'move-selection' && moveOrigin) {
-                    const rawInches = mouseToInches(y);
-                    const delta = rawInches - moveGrabInches;
-                    const rawNewStart = moveOrigin.startInches + delta;
-                    const length = moveOrigin.endInches - moveOrigin.startInches;
-                    const snappedStart = snapToSide(rawNewStart, moveSnapSide);
-                    // Keep selection non-negative as much as possible
-                    let newStart = snappedStart;
-                    let newEnd = snappedStart + length;
-                    if (Math.min(newStart, newEnd) < 0) {
-                        const shift = -Math.min(newStart, newEnd);
-                        newStart += shift;
-                        newEnd += shift;
-                    }
-                    selection = { startInches: newStart, endInches: newEnd };
+                    applyMoveSelection(x, y);
                 }
             }
             drawRuler();
@@ -2548,7 +2665,8 @@
 
         canvas.addEventListener('mousedown', e => {
             if (isMobileUi()) return;
-            if (e.button !== 0) return;
+            if (e.button !== 0 && e.button !== 2) return;
+            e.preventDefault();
             stopPanCoast();
 
             const rect = canvas.getBoundingClientRect();
@@ -2556,11 +2674,23 @@
             const y = e.clientY - rect.top;
             inputSide = sideFromX(x);
 
-            const copied = readoutHitAt(x, y);
-            if (copied) {
-                copyReadoutNumber(copied.number, copied.side);
-                isDragging = false;
-                dragMode = 'copy';
+            if (e.button === 0) {
+                const copied = readoutHitAt(x, y);
+                if (copied) {
+                    copyReadoutNumber(copied.number, copied.key);
+                    isDragging = false;
+                    dragMode = 'copy';
+                    return;
+                }
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                mouseMoved = false;
+                if (selection && isPointInSelection(x, y, selection)) {
+                    beginMoveSelection(x, y);
+                } else {
+                    dragMode = 'pan';
+                }
                 return;
             }
 
@@ -2569,16 +2699,9 @@
             startY = e.clientY;
             mouseMoved = false;
 
-            // Priority: move existing selection → create selection on ticks → pan
             if (selection && isPointInSelection(x, y, selection)) {
-                dragMode = 'move-selection';
-                moveSnapSide = sideFromX(x);
-                moveOrigin = { startInches: selection.startInches, endInches: selection.endInches };
-                moveGrabInches = mouseToInches(y);
-                // Clear point-input while selection is the active measurement
-                inputString = '';
-                inputSideWhenSet = null;
-            } else if (isInTickZone(x)) {
+                beginMoveSelection(x, y);
+            } else {
                 dragMode = 'create-selection';
                 const side = sideFromX(x);
                 createSnapSide = side;
@@ -2586,12 +2709,9 @@
                 lastPointerY = y;
                 createStartInches = snapToSide(mouseToInches(y), side);
                 createEndInches = createStartInches;
-                // Provisional: hide old selection while drawing a new one
                 selection = null;
                 inputString = '';
                 inputSideWhenSet = null;
-            } else {
-                dragMode = 'pan';
             }
         });
 
@@ -2618,34 +2738,34 @@
                     } else {
                         selection = null;
                     }
-                } else if (!mouseMoved) {
-                    // Single click on ticks: set point value (existing behavior)
-                    selection = null;
-                    const mmVal  = findNearestMmValue(y, x);
-                    const inchVal = findNearestInchValue(y, x);
-                    if (mmVal && x < canvas.width / 2) {
-                        inputSide = 'left';
-                        inputSideWhenSet = 'left';
-                        inputString = mmVal;
-                    } else if (inchVal && x >= canvas.width / 2) {
-                        inputSide = 'right';
-                        inputSideWhenSet = 'right';
-                        inputString = inchVal;
-                    }
                 }
                 createStartInches = null;
                 createEndInches = null;
                 createSnapSide = null;
             } else if (dragMode === 'move-selection') {
-                // selection already updated during drag
                 moveOrigin = null;
                 moveGrabInches = null;
                 moveSnapSide = null;
+                moveGrabEnd = 'upper';
             } else if (dragMode === 'pan') {
-                // Click anywhere outside the highlighted area clears it
-                if (!mouseMoved && selection && !isPointInSelection(x, y, selection)) {
-                    clearTopValues();
-                } else if (mouseMoved) {
+                if (!mouseMoved) {
+                    if (isInTickZone(x)) {
+                        selection = null;
+                        const mmVal  = findNearestMmValue(y, x);
+                        const inchVal = findNearestInchValue(y, x);
+                        if (mmVal && x < canvas.width / 2) {
+                            inputSide = 'left';
+                            inputSideWhenSet = 'left';
+                            inputString = mmVal;
+                        } else if (inchVal && x >= canvas.width / 2) {
+                            inputSide = 'right';
+                            inputSideWhenSet = 'right';
+                            inputString = inchVal;
+                        }
+                    } else if (selection && !isPointInSelection(x, y, selection)) {
+                        clearTopValues();
+                    }
+                } else {
                     startPanCoast();
                 }
             }
@@ -2675,6 +2795,7 @@
             moveOrigin = null;
             moveGrabInches = null;
             moveSnapSide = null;
+            moveGrabEnd = 'upper';
             isDragging = false;
             mouseMoved = false;
             dragMode = null;
@@ -2708,6 +2829,7 @@
             moveOrigin = null;
             moveGrabInches = null;
             moveSnapSide = null;
+            moveGrabEnd = 'upper';
             dragMode = null;
             isDragging = false;
         }
@@ -2748,7 +2870,7 @@
         function applyMobileTap(x, y) {
             const copied = readoutHitAt(x, y);
             if (copied) {
-                copyReadoutNumber(copied.number, copied.side);
+                copyReadoutNumber(copied.number, copied.key);
                 return;
             }
             if (pendingPick) {
@@ -2829,14 +2951,9 @@
                 loupeActive = false;
                 hideMeasureBtn();
                 pendingPick = null;
-                dragMode = 'move-selection';
-                touchMode = 'move';
                 isDragging = true;
-                moveSnapSide = sideFromX(p.x);
-                moveOrigin = { startInches: selection.startInches, endInches: selection.endInches };
-                moveGrabInches = mouseToInches(p.y);
-                inputString = '';
-                inputSideWhenSet = null;
+                touchMode = 'move';
+                beginMoveSelection(p.x, p.y);
                 drawRuler();
                 return;
             }
@@ -2894,21 +3011,7 @@
                 touchLastY = p.y;
                 recordPanSample(p.y);
             } else if (touchMode === 'move' && moveOrigin) {
-                const rawInches = mouseToInches(p.y);
-                const delta = rawInches - moveGrabInches;
-                const rawNewStart = moveOrigin.startInches + delta;
-                const length = moveOrigin.endInches - moveOrigin.startInches;
-                const side = sideFromX(p.x);
-                moveSnapSide = side;
-                const snappedStart = snapToSide(rawNewStart, side);
-                let newStart = snappedStart;
-                let newEnd = snappedStart + length;
-                if (Math.min(newStart, newEnd) < 0) {
-                    const shift = -Math.min(newStart, newEnd);
-                    newStart += shift;
-                    newEnd += shift;
-                }
-                selection = { startInches: newStart, endInches: newEnd };
+                applyMoveSelection(p.x, p.y);
             } else if (touchMode === 'loupe') {
                 setLoupeFromPoint(p.x, p.y);
             }
@@ -3011,7 +3114,7 @@
         }, { passive: false });
 
         canvas.addEventListener('contextmenu', e => {
-            if (isMobileUi()) e.preventDefault();
+            e.preventDefault();
         });
 
         (function buildKeypad() {
