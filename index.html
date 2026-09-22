@@ -710,6 +710,7 @@
                 <li>The left half of the ruler is millimeters; the right half is inches. Move the pointer to the side you want to enter, then type a number. On the inches side, feel free to use spaces and forward-slashes for fractions (eg. 3 1/4). Hitting Enter converts it to a decimal, and provides the metric conversion.</li>
                 <li>Click a tick mark to load that value and convert it.</li>
                 <li>Click a conversion value to copy it to the clipboard.</li>
+                <li>Type in an expression like (1 3/4in) + 4*34mm + 2ft and hit enter to see the result in mm and in.</li>
             </ul>
             <table>
                 <tr><td class="k"><kbd>Backspace</kbd></td><td>Delete the last typed character.</td></tr>
@@ -785,7 +786,7 @@
                     </div>
                 </div>
             </div>
-            <div id="helpLegal">© 2026 Erik Goossens. Code released under the <a href="https://opensource.org/license/mit" target="_blank" rel="noopener noreferrer">MIT License</a> — feel free to mess with it, just please keep the attribution intact. v11</div>
+            <div id="helpLegal">© 2026 Erik Goossens. Code released under the <a href="https://opensource.org/license/mit" target="_blank" rel="noopener noreferrer">MIT License</a> — feel free to mess with it, just please keep the attribution intact. v12</div>
         </div>
     </div>
 
@@ -860,6 +861,10 @@
         let inputSideWhenSet = null;
         let inputString = '';
         let frozenMmReadout = null;
+        let replaceOnNextType = false;
+        let exactInches = null;
+        let exactInputString = '';
+        let exactSide = null;
         let showThreads = false;
         let showGauges = false;
         let gaugeMaterialIndex = 0;
@@ -1206,17 +1211,14 @@
         function inDec() { return isMobileUi() ? 3 : 6; }
 
         function chooseReadoutFont(leftText, rightText, bounds) {
-            if (!isMobileUi()) {
-                readoutFontPx = 48;
-                readoutPad = READOUT_PAD;
-                return;
-            }
-            readoutPad = 12;
-            let size = Math.min(28, Math.max(16, Math.round(canvas.width / 13)));
-            const gap = 14;
+            const mobile = isMobileUi();
+            readoutPad = mobile ? 12 : READOUT_PAD;
+            let size = mobile ? Math.min(28, Math.max(16, Math.round(canvas.width / 13))) : 48;
+            const minSize = mobile ? 14 : 15;
+            const gap = mobile ? 14 : 20;
             const extrasL = bounds ? [bounds.upperMm, bounds.lowerMm] : [];
             const extrasR = bounds ? [bounds.upperIn, bounds.lowerIn] : [];
-            while (size >= 14) {
+            while (size >= minSize) {
                 ctx.font = `${size}px Arial`;
                 let lw = leftText ? ctx.measureText(leftText).width : 0;
                 let rw = rightText ? ctx.measureText(rightText).width : 0;
@@ -1225,6 +1227,7 @@
                 extrasL.forEach(t => { lw = Math.max(lw, ctx.measureText(t).width); });
                 extrasR.forEach(t => { rw = Math.max(rw, ctx.measureText(t).width); });
                 if (lw + rw + readoutPad * 4 + gap <= canvas.width) break;
+                if (size === minSize) break;
                 size -= 1;
             }
             readoutFontPx = size;
@@ -1530,6 +1533,367 @@
             return str || '0';
         }
 
+
+        function entrySide() {
+            return inputSideWhenSet === 'left' ? 'left' : 'right';
+        }
+
+        // --- length expressions ---
+        function isExprChar(c) {
+            const l = c.toLowerCase();
+            return (c >= '0' && c <= '9') || c === '.' || c === '/' || c === '+' || c === '-' ||
+                c === '*' || c === '(' || c === ')' || c === ' ' ||
+                l === 'i' || l === 'n' || l === 'm' || l === 'f' || l === 't';
+        }
+
+        // forceMeter: a trailing single "m" at the end of input is meters (Enter).
+        // Otherwise that "m" stays incomplete so it can still become "mm".
+        function parseExprString(raw, side, forceMeter) {
+            const s = String(raw);
+            const n = s.length;
+            let i = 0;
+            const IN_PER_MM = 1 / 25.4;
+            const IN_PER_M = 1000 / 25.4;
+            const IN_PER_FT = 12;
+
+            function isDigit(c) { return c >= '0' && c <= '9'; }
+
+            function skipWS() {
+                while (i < n && s[i] === ' ') i++;
+            }
+
+            function applyUnit(bare, unitState) {
+                if (!unitState || unitState.state === 'partial') return { state: 'partial' };
+                if (unitState.state !== 'ok') return { state: 'bad' };
+                if (!unitState.unit) return { state: 'ok', value: { k: 'bare', n: bare } };
+                let inches;
+                if (unitState.unit === 'in') inches = bare;
+                else if (unitState.unit === 'ft') inches = bare * IN_PER_FT;
+                else if (unitState.unit === 'mm') inches = bare * IN_PER_MM;
+                else if (unitState.unit === 'm') inches = bare * IN_PER_M;
+                else return { state: 'bad' };
+                if (!isFinite(inches)) return { state: 'bad' };
+                return { state: 'ok', value: { k: 'len', in: inches } };
+            }
+
+            function parseUnit() {
+                if (i >= n) return { state: 'ok', unit: null };
+                const c = s[i].toLowerCase();
+                if (c !== 'i' && c !== 'm' && c !== 'f') return { state: 'ok', unit: null };
+                if (c === 'i') {
+                    i++;
+                    if (i >= n) return { state: 'partial' };
+                    if (s[i].toLowerCase() !== 'n') return { state: 'bad' };
+                    i++;
+                    return { state: 'ok', unit: 'in' };
+                }
+                if (c === 'f') {
+                    i++;
+                    if (i >= n) return { state: 'partial' };
+                    if (s[i].toLowerCase() !== 't') return { state: 'bad' };
+                    i++;
+                    return { state: 'ok', unit: 'ft' };
+                }
+                i++;
+                if (i < n && s[i].toLowerCase() === 'm') {
+                    i++;
+                    return { state: 'ok', unit: 'mm' };
+                }
+                if (i >= n && !forceMeter) return { state: 'partial' };
+                return { state: 'ok', unit: 'm' };
+            }
+
+            function finishUnit(value) {
+                const save = i;
+                skipWS();
+                if (i >= n) return { state: 'ok', value };
+                const c = s[i].toLowerCase();
+                if (c !== 'i' && c !== 'm' && c !== 'f') {
+                    i = save;
+                    return { state: 'ok', value };
+                }
+                if (value.k === 'len') return { state: 'bad' };
+                const applied = applyUnit(value.n, parseUnit());
+                return applied;
+            }
+
+            function parseNumber() {
+                if (i >= n) return { state: 'partial' };
+                const start = i;
+                if (s[i] === '.') {
+                    i++;
+                    let digits = 0;
+                    while (i < n && isDigit(s[i])) { digits++; i++; }
+                    if (digits === 0) return { state: 'partial' };
+                    return { state: 'ok', value: parseFloat(s.slice(start, i)), isInt: false };
+                }
+                if (!isDigit(s[i])) return { state: 'bad' };
+                while (i < n && isDigit(s[i])) i++;
+                let isInt = true;
+                if (i < n && s[i] === '.') {
+                    isInt = false;
+                    i++;
+                    while (i < n && isDigit(s[i])) i++;
+                }
+                const value = parseFloat(s.slice(start, i));
+                if (!isFinite(value)) return { state: 'bad' };
+                return { state: 'ok', value, isInt };
+            }
+
+            function tryMixed(whole) {
+                if (i >= n || s[i] !== ' ') return null;
+                let j = i;
+                while (j < n && s[j] === ' ') j++;
+                if (j >= n || !isDigit(s[j])) return null;
+                let k = j;
+                while (k < n && isDigit(s[k])) k++;
+                let t = k;
+                while (t < n && s[t] === ' ') t++;
+                if (t >= n) {
+                    i = n;
+                    return { state: 'partial' };
+                }
+                if (s[t] !== '/') return null;
+                t++;
+                while (t < n && s[t] === ' ') t++;
+                if (t >= n) {
+                    i = n;
+                    return { state: 'partial' };
+                }
+                if (!isDigit(s[t])) return { state: 'bad' };
+                let d = t;
+                while (d < n && isDigit(s[d])) d++;
+                const den = parseInt(s.slice(t, d), 10);
+                const num = parseInt(s.slice(j, k), 10);
+                if (den === 0) {
+                    i = d;
+                    if (d >= n) return { state: 'partial' };
+                    return { state: 'bad' };
+                }
+                i = d;
+                return { state: 'ok', value: whole + num / den };
+            }
+
+            function tryFractionWithUnit(numer) {
+                let j = i;
+                while (j < n && s[j] === ' ') j++;
+                if (j >= n || s[j] !== '/') return null;
+                let t = j + 1;
+                while (t < n && s[t] === ' ') t++;
+                if (t >= n || !isDigit(s[t])) return null;
+                let d = t;
+                while (d < n && isDigit(s[d])) d++;
+                let u = d;
+                while (u < n && s[u] === ' ') u++;
+                if (u >= n) return null;
+                const uc = s[u].toLowerCase();
+                if (uc !== 'i' && uc !== 'm' && uc !== 'f') return null;
+                const den = parseInt(s.slice(t, d), 10);
+                if (den === 0) return { state: 'bad' };
+                i = u;
+                return applyUnit(numer / den, parseUnit());
+            }
+
+            function parseQuantity() {
+                if (i >= n) return { state: 'partial' };
+                const num = parseNumber();
+                if (num.state !== 'ok') return num;
+                if (num.isInt) {
+                    const mixed = tryMixed(num.value);
+                    if (mixed) {
+                        if (mixed.state !== 'ok') return mixed;
+                        return finishUnit({ k: 'bare', n: mixed.value });
+                    }
+                    const frac = tryFractionWithUnit(num.value);
+                    if (frac) return frac;
+                }
+                return finishUnit({ k: 'bare', n: num.value });
+            }
+
+            function parseAtom() {
+                if (i >= n) return { state: 'partial' };
+                if (s[i] === '(') {
+                    i++;
+                    if (i >= n) return { state: 'partial' };
+                    const inner = parseExpr();
+                    if (inner.state !== 'ok') return inner;
+                    skipWS();
+                    if (i >= n) return { state: 'partial' };
+                    if (s[i] !== ')') return { state: 'bad' };
+                    i++;
+                    return finishUnit(inner.value);
+                }
+                return parseQuantity();
+            }
+
+            function parseUnary() {
+                if (i >= n) return { state: 'partial' };
+                if (s[i] === '+' || s[i] === '-') {
+                    const op = s[i++];
+                    if (i >= n) return { state: 'partial' };
+                    const v = parseUnary();
+                    if (v.state !== 'ok') return v;
+                    if (op === '+') return v;
+                    if (v.value.k === 'bare') return { state: 'ok', value: { k: 'bare', n: -v.value.n } };
+                    return { state: 'ok', value: { k: 'len', in: -v.value.in } };
+                }
+                return parseAtom();
+            }
+
+            function isZeroVal(v) {
+                return v.k === 'bare' ? v.n === 0 : v.in === 0;
+            }
+
+            function combineMul(left, op, right) {
+                const L = left.value;
+                const R = right.value;
+                if (op === '/') {
+                    if (isZeroVal(R)) {
+                        if (i >= n) return { state: 'partial' };
+                        return { state: 'bad' };
+                    }
+                    if (L.k === 'bare' && R.k === 'bare') return { state: 'ok', value: { k: 'bare', n: L.n / R.n } };
+                    if (L.k === 'len' && R.k === 'bare') return { state: 'ok', value: { k: 'len', in: L.in / R.n } };
+                    if (L.k === 'len' && R.k === 'len') return { state: 'ok', value: { k: 'bare', n: L.in / R.in } };
+                    return { state: 'bad' };
+                }
+                if (L.k === 'bare' && R.k === 'bare') return { state: 'ok', value: { k: 'bare', n: L.n * R.n } };
+                if (L.k === 'bare' && R.k === 'len') return { state: 'ok', value: { k: 'len', in: L.n * R.in } };
+                if (L.k === 'len' && R.k === 'bare') return { state: 'ok', value: { k: 'len', in: L.in * R.n } };
+                return { state: 'bad' };
+            }
+
+            function asLen(v) {
+                if (v.k === 'len') return v.in;
+                return side === 'left' ? v.n * IN_PER_MM : v.n;
+            }
+
+            function combineAdd(left, op, right) {
+                const sign = op === '-' ? -1 : 1;
+                const L = left.value;
+                const R = right.value;
+                if (L.k === 'bare' && R.k === 'bare') {
+                    return { state: 'ok', value: { k: 'bare', n: L.n + sign * R.n } };
+                }
+                const inches = asLen(L) + sign * asLen(R);
+                if (!isFinite(inches)) return { state: 'bad' };
+                return { state: 'ok', value: { k: 'len', in: inches } };
+            }
+
+            function parseTerm() {
+                const first = parseUnary();
+                if (first.state !== 'ok') return first;
+                let left = first;
+                while (true) {
+                    const save = i;
+                    skipWS();
+                    if (i >= n) return left;
+                    const op = s[i];
+                    if (op !== '*' && op !== '/') {
+                        i = save;
+                        return left;
+                    }
+                    i++;
+                    skipWS();
+                    if (i >= n) return { state: 'partial' };
+                    const right = parseUnary();
+                    if (right.state !== 'ok') return right;
+                    const combined = combineMul(left, op, right);
+                    if (combined.state !== 'ok') return combined;
+                    left = combined;
+                }
+            }
+
+            function parseExpr() {
+                skipWS();
+                if (i >= n) return { state: 'partial' };
+                let left = parseTerm();
+                if (left.state !== 'ok') return left;
+                while (true) {
+                    const save = i;
+                    skipWS();
+                    if (i >= n) return left;
+                    const op = s[i];
+                    if (op !== '+' && op !== '-') {
+                        i = save;
+                        return left;
+                    }
+                    i++;
+                    skipWS();
+                    if (i >= n) return { state: 'partial' };
+                    const right = parseTerm();
+                    if (right.state !== 'ok') return right;
+                    const combined = combineAdd(left, op, right);
+                    if (combined.state !== 'ok') return combined;
+                    left = combined;
+                }
+            }
+
+            for (let c = 0; c < n; c++) {
+                if (!isExprChar(s[c])) return { ok: false };
+            }
+            if (n === 0) return { ok: true, complete: false };
+            const res = parseExpr();
+            if (!res || res.state === 'bad') return { ok: false };
+            if (res.state === 'partial') {
+                if (i < n) return { ok: false };
+                return { ok: true, complete: false };
+            }
+            skipWS();
+            if (i < n) return { ok: false };
+            const inches = res.value.k === 'len'
+                ? res.value.in
+                : (side === 'left' ? res.value.n * IN_PER_MM : res.value.n);
+            if (!isFinite(inches)) return { ok: false };
+            return { ok: true, complete: true, inches };
+        }
+
+        function expressionDeadEnd(raw, side) {
+            if (/i$/i.test(raw)) {
+                const fin = parseExprString(raw + 'n', side, false);
+                if (!fin.ok) return true;
+                if (!fin.complete) return expressionDeadEnd(raw + 'n', side);
+                return false;
+            }
+            if (/f$/i.test(raw)) {
+                const fin = parseExprString(raw + 't', side, false);
+                if (!fin.ok) return true;
+                if (!fin.complete) return expressionDeadEnd(raw + 't', side);
+                return false;
+            }
+            return false;
+        }
+
+        function isExpressionPrefix(raw) {
+            if (raw === '') return true;
+            const parsed = parseExprString(raw, 'right', false);
+            if (!parsed.ok) return false;
+            if (parsed.complete) return true;
+            return !expressionDeadEnd(raw, 'right');
+        }
+
+        function isPlainQuantityDisplay(str) {
+            return /^-?[\d.\s/]+$/.test(str);
+        }
+
+        function evaluateTyped(raw, side, commit) {
+            if (!raw || !String(raw).trim()) return null;
+            const useSide = side === 'left' ? 'left' : 'right';
+            const parsed = parseExprString(raw, useSide, !!commit);
+            if (parsed.ok && parsed.complete) return { inches: parsed.inches };
+            if (!commit && isPlainQuantityDisplay(raw) && /\s/.test(raw)) {
+                const m = raw.trim().match(/^(-?\d+(?:\.\d+)?)(?:\s+\d*\s*\/?\s*\d*)?$/);
+                if (m) {
+                    const whole = parseFloat(m[1]);
+                    if (!isNaN(whole)) {
+                        return { inches: useSide === 'left' ? whole / 25.4 : whole, partialWhole: true };
+                    }
+                }
+            }
+            return null;
+        }
+        // --- end length expressions ---
+
         function clearTopValues() {
             selection = null;
             createStartInches = null;
@@ -1537,6 +1901,10 @@
             inputString = '';
             inputSideWhenSet = null;
             frozenMmReadout = null;
+            replaceOnNextType = false;
+            exactInches = null;
+            exactInputString = '';
+            exactSide = null;
             mobileFromInches = null;
             pendingPick = null;
             loupeActive = false;
@@ -1930,7 +2298,9 @@
 
         function updateKeypadDisplay() {
             const unit = inputSideWhenSet === 'left' ? 'mm' : 'in';
-            keypadDisplayEl.textContent = inputString === '' ? '' : `${inputString} ${unit}`;
+            const text = inputString === '' ? ''
+                : (isPlainQuantityDisplay(inputString) ? `${inputString} ${unit}` : inputString);
+            keypadDisplayEl.textContent = text;
             keypadDisplayEl.style.fontSize = `${readoutFontPx}px`;
             keypadDisplayEl.style.left = inputSideWhenSet === 'left' ? '0' : '50%';
             keypadDisplayEl.style.width = '50%';
@@ -1957,19 +2327,46 @@
             drawRuler();
         }
 
-        function commitMobileKeypad() {
-            if (!keypadIsOpen()) return;
-            const raw = inputString;
-            frozenMmReadout = null;
-            const v = parseInput(raw);
+        function commitTypedValue(raw, side) {
+            replaceOnNextType = false;
+            const ev = evaluateTyped(raw, side, true);
             if (!raw.trim()) {
                 inputString = '';
-            } else if (isNaN(v)) {
-                inputString = raw;
-            } else {
-                const dec = inputSideWhenSet === 'left' ? mmDec() : inDec();
-                inputString = formatNumber(v, dec);
+                exactInches = null;
+                exactInputString = '';
+                frozenMmReadout = null;
+                return;
             }
+            let native = null;
+            let inches = null;
+            if (ev) {
+                inches = ev.inches;
+                native = side === 'left' ? ev.inches * MM_PER_INCH : ev.inches;
+            } else if (isPlainQuantityDisplay(raw)) {
+                const whole = parseFloat(raw);
+                if (!isNaN(whole)) {
+                    native = whole;
+                    inches = side === 'left' ? whole / MM_PER_INCH : whole;
+                }
+            }
+            if (native == null) {
+                inputString = raw;
+                exactInches = null;
+                exactInputString = '';
+                return;
+            }
+            const dec = side === 'left' ? mmDec() : inDec();
+            inputString = formatNumber(native, dec);
+            exactInches = inches;
+            exactInputString = inputString;
+            exactSide = inputSideWhenSet;
+            frozenMmReadout = null;
+            replaceOnNextType = false;
+        }
+
+        function commitMobileKeypad() {
+            if (!keypadIsOpen()) return;
+            commitTypedValue(inputString, entrySide());
             closeMobileKeypad();
             drawRuler();
         }
@@ -2232,16 +2629,18 @@
 
             let inputValueMm = null;
             let inputValueInches = null;
-            const inputValue = parseInput(inputString);
-
-            if (!isNaN(inputValue) && inputString) {
-                if (inputSideWhenSet === 'left') {
-                    inputValueMm = inputValue;
-                    inputValueInches = inputValue / MM_PER_INCH;
+            const typedSide = entrySide();
+            let typed = null;
+            if (inputString) {
+                if (exactInches != null && exactInputString === inputString && exactSide === inputSideWhenSet) {
+                    typed = { inches: exactInches };
                 } else {
-                    inputValueInches = inputValue;
-                    inputValueMm = inputValue * MM_PER_INCH;
+                    typed = evaluateTyped(inputString, typedSide, false);
                 }
+            }
+            if (typed) {
+                inputValueInches = typed.inches;
+                inputValueMm = typed.inches * MM_PER_INCH;
             }
 
             let leftReadout = '';
@@ -2261,17 +2660,20 @@
                     lowerIn: `${formatNumber(lower, inDec())} in`
                 };
             } else if (inputString) {
-                const unit = inputSideWhenSet === 'left' ? 'mm' : 'in';
-                const primary = `${inputString} ${unit}`;
-                let converted = 'Invalid';
-                if (inputSideWhenSet === 'right' && frozenMmReadout && inputString.includes(' ')) {
+                const plain = isPlainQuantityDisplay(inputString);
+                const primary = plain
+                    ? `${inputString} ${typedSide === 'left' ? 'mm' : 'in'}`
+                    : inputString;
+                let converted = '';
+                const showFrozen = plain && typedSide === 'right' && frozenMmReadout && inputString.includes(' ');
+                if (showFrozen) {
                     converted = frozenMmReadout;
-                } else if (!isNaN(inputValue)) {
-                    converted = inputSideWhenSet === 'left'
-                        ? formatNumber(inputValue / MM_PER_INCH, inDec()) + ' in'
-                        : formatNumber(inputValue * MM_PER_INCH, mmDec()) + ' mm';
+                } else if (typed) {
+                    converted = typedSide === 'left'
+                        ? formatNumber(typed.inches, inDec()) + ' in'
+                        : formatNumber(typed.inches * MM_PER_INCH, mmDec()) + ' mm';
                 }
-                if (inputSideWhenSet === 'left') {
+                if (typedSide === 'left') {
                     leftReadout = primary;
                     rightReadout = converted;
                 } else {
@@ -2624,7 +3026,7 @@
             const y = e.clientY - rect.top;
             lastPointerX = x;
             lastPointerY = y;
-            inputSide = sideFromX(x);
+            notePointerSide(sideFromX(x));
 
             const maxMm = 30 * TICK_SCALE;
             const whole = wholeTickLength;
@@ -2672,7 +3074,7 @@
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
-            inputSide = sideFromX(x);
+            notePointerSide(sideFromX(x));
 
             if (e.button === 0) {
                 const copied = readoutHitAt(x, y);
@@ -2922,7 +3324,7 @@
             touchLastY = p.y;
             lastPointerX = p.x;
             lastPointerY = p.y;
-            inputSide = sideFromX(p.x);
+            notePointerSide(sideFromX(p.x));
             mouseMoved = false;
             keypadHoldSide = null;
 
@@ -3174,6 +3576,49 @@
             document.addEventListener(type, e => e.preventDefault(), { passive: false });
         });
 
+        // Crossing the center marks the current entry stale. Coming back to
+        // the side it was typed on does not clear that; the next character
+        // still replaces it. Leaving the window does the same.
+        function notePointerSide(side) {
+            if ((side === 'left' || side === 'right') &&
+                (inputSide === 'left' || inputSide === 'right') &&
+                side !== inputSide &&
+                inputString) {
+                replaceOnNextType = true;
+            }
+            inputSide = side;
+        }
+
+        function typingReplacesCurrent() {
+            if (!inputString) return false;
+            if (replaceOnNextType) return true;
+            if (inputSide !== 'left' && inputSide !== 'right') return false;
+            return inputSide !== entrySide();
+        }
+
+        function tryAppendTypedChar(ch) {
+            if (!ch || ch.length !== 1) return false;
+            const replace = typingReplacesCurrent();
+            const base = replace ? '' : inputString;
+            if (ch === ' ' && base.trim() === '' && !base.includes('(')) return false;
+            const next = base + ch;
+            if (!isExpressionPrefix(next)) return false;
+            selection = null;
+            createStartInches = null;
+            createEndInches = null;
+            if (replace || base === '') {
+                if (inputSide === 'left' || inputSide === 'right') inputSideWhenSet = inputSide;
+                frozenMmReadout = null;
+                replaceOnNextType = false;
+            } else if (ch === ' ' && inputSideWhenSet === 'right' && isPlainQuantityDisplay(base)) {
+                const v = parseFloat(base);
+                if (!isNaN(v)) frozenMmReadout = formatNumber(v * MM_PER_INCH, 5) + ' mm';
+            }
+            inputString = next;
+            if (!isPlainQuantityDisplay(inputString)) frozenMmReadout = null;
+            return true;
+        }
+
         document.addEventListener('keydown', e => {
             // Ignore if user is typing into another focused control
             const typing = e.target && (
@@ -3227,42 +3672,21 @@
                 return;
             }
 
-            const isSpace = e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space';
-            if (isSpace) {
-                const onInches = inputSide === 'right' || inputSideWhenSet === 'right';
-                if (onInches && inputString !== '') {
-                    e.preventDefault();
-                    selection = null;
-                    createStartInches = null;
-                    createEndInches = null;
-                    inputSideWhenSet = 'right';
-                    if (!inputString.endsWith(' ')) {
-                        const v = parseInput(inputString);
-                        if (!isNaN(v)) {
-                            frozenMmReadout = formatNumber(v * MM_PER_INCH, 5) + ' mm';
-                        }
-                        inputString += ' ';
-                    }
-                }
-            } else if (/[0-9./]/.test(e.key)) {
-                // Typing a new point value clears any selection
-                selection = null;
-                createStartInches = null;
-                createEndInches = null;
-                if (inputString === '' || (inputSide !== inputSideWhenSet && !inputString.includes(' '))) {
-                    inputString = e.key;
-                    inputSideWhenSet = inputSide;
-                    frozenMmReadout = null;
-                } else {
-                    inputString += e.key;
-                }
-            } else if (e.key === 'Backspace') {
-                inputString = inputString.slice(0, -1);
-                if (!inputString.includes(' ')) frozenMmReadout = null;
-            } else if (e.key === 'Enter') {
-                const v = parseInput(inputString);
-                frozenMmReadout = null;
-                inputString = isNaN(v) ? '' : formatNumber(v, 6);
+            const chord = e.metaKey || e.ctrlKey || e.altKey;
+            let ch = e.key;
+            if (ch === 'Spacebar' || e.code === 'Space') ch = ' ';
+
+            if (!chord && e.key === 'Backspace') {
+                e.preventDefault();
+                if (inputString) inputString = inputString.slice(0, -1);
+                if (!inputString.includes(' ') || !isPlainQuantityDisplay(inputString)) frozenMmReadout = null;
+                replaceOnNextType = false;
+            } else if (!chord && e.key === 'Enter') {
+                e.preventDefault();
+                commitTypedValue(inputString, entrySide());
+                replaceOnNextType = true;
+            } else if (!chord && ch && ch.length === 1 && tryAppendTypedChar(ch)) {
+                e.preventDefault();
             } else if (key === 't') {
                 toggleThreads();
                 return;
@@ -3271,6 +3695,10 @@
                 return;
             }
             drawRuler();
+        });
+
+        window.addEventListener('blur', () => {
+            if (inputString) replaceOnNextType = true;
         });
 
         buildMaterialSlider();
