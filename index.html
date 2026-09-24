@@ -394,8 +394,8 @@
         }
         #helpTip {
             flex: 0 0 auto;
-            margin-top: 34px;
-            padding-top: 34px;
+            margin-top: 17px;
+            padding-top: 17px;
             border-top: 1px solid #ccc;
         }
         #helpTip p {
@@ -408,7 +408,7 @@
         }
         #helpLegal {
             flex: 0 0 auto;
-            margin-top: 40px;
+            margin-top: 20px;
             text-align: right;
             font-size: 11px;
             line-height: 1.4;
@@ -576,19 +576,26 @@
         #keypad.visible {
             display: block;
         }
+        #keypadUnits,
+        #keypadKeys,
+        #keypadActions {
+            gap: 6px;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+        #keypadUnits {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+        }
         #keypadKeys {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 6px;
-            max-width: 420px;
-            margin: 0 auto;
+            grid-template-columns: repeat(4, 1fr);
+            margin-top: 6px;
         }
         #keypadActions {
             display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 6px;
-            max-width: 420px;
-            margin: 6px auto 0;
+            grid-template-columns: 1fr;
+            margin-top: 6px;
         }
         #keypad .key {
             appearance: none;
@@ -606,23 +613,25 @@
         #keypad .key:active {
             background: #d8d8d8;
         }
-        #keypad .key.wide {
-            grid-column: span 1;
-        }
-        #keypad .key.frac {
-            display: none;
+        #keypad .key.unit {
             font-size: 16px;
+            background: #2C5C91;
+            color: #fff;
         }
-        #keypad.inches .key.frac {
-            display: block;
+        #keypad .key.op,
+        #keypad .key.frac {
+            font-size: 18px;
         }
-        #keypad .key.action {
-            font-size: 15px;
+        #keypad .key.grey {
             background: #cfcfcf;
         }
-        #keypad .key.done {
-            background: #0d7377;
-            color: #fff;
+        #keypad .key.yellow {
+            background: #F2BF36;
+            color: #1a1404;
+        }
+        #keypad .key.spacewide {
+            grid-column: span 3;
+            font-size: 16px;
         }
 
         @media (hover: none) and (pointer: coarse) {
@@ -676,6 +685,41 @@
             }
             #helpLegal {
                 text-align: left;
+            }
+            .tip-row {
+                flex-wrap: nowrap;
+                gap: 16px;
+            }
+            .tip-switch {
+                height: 30px;
+                border-radius: 15px;
+            }
+            .tip-switch-thumb {
+                border-radius: 13px;
+            }
+            .tip-switch-opt {
+                font-size: 10px;
+                letter-spacing: 0.02em;
+                line-height: 26px;
+                padding: 0 7px;
+            }
+            .tip-btns {
+                flex-wrap: nowrap;
+                gap: 6px;
+                min-width: 0;
+            }
+            a.tip-btn {
+                box-sizing: border-box;
+                height: 30px;
+                padding: 0 8px;
+                font-size: 13px;
+                line-height: 1;
+                display: inline-flex;
+                align-items: center;
+                border-radius: 6px;
+            }
+            a.tip-btn.other {
+                padding: 0 7px;
             }
         }
     </style>
@@ -769,7 +813,8 @@
                 <li>Tap+hold on the ruler to select a value with the loupe</li>
                 <li>Tap “measure from here”</li>
                 <li>Tap+hold elsewhere on the ruler, and select “measure to here”</li>
-                <li>Drag the red bar to move it around. The half you grab is the end that snaps — upper half snaps the top, lower half snaps the bottom — to the increments on the side that your finger is on.</li>
+                <li>Drag a measurement bar to move it. The half you grab is the end that snaps — upper half snaps the top, lower half snaps the bottom — to the increments on the side that your finger is on.</li>
+                <li>Double-tap a measurement bar to remove it.</li>
                 <li>Tap empty space to clear the measurement</li>
             </ul>
 
@@ -802,18 +847,15 @@
                     </div>
                 </div>
             </div>
-            <div id="helpLegal">© 2026 Erik Goossens. Code released under the <a href="https://opensource.org/license/mit" target="_blank" rel="noopener noreferrer">MIT License</a> — feel free to mess with it, just please keep the attribution intact. v13</div>
+            <div id="helpLegal">© 2026 Erik Goossens. Code released under the <a href="https://opensource.org/license/mit" target="_blank" rel="noopener noreferrer">MIT License</a> — feel free to mess with it, just please keep the attribution intact. v13.1</div>
         </div>
     </div>
 
     <button type="button" id="measureBtn">Measure from here</button>
     <div id="keypadDisplay"></div>
     <div id="keypad" aria-label="Number keypad">
+        <div id="keypadUnits"></div>
         <div id="keypadKeys"></div>
-        <div id="keypadActions">
-            <button type="button" class="key action" data-key="cancel">Cancel</button>
-            <button type="button" class="key action done" data-key="done">Done</button>
-        </div>
     </div>
 
     <script>
@@ -837,6 +879,7 @@
         const measureBtn = document.getElementById('measureBtn');
         const keypadEl = document.getElementById('keypad');
         const keypadKeysEl = document.getElementById('keypadKeys');
+        const keypadUnitsEl = document.getElementById('keypadUnits');
         const keypadDisplayEl = document.getElementById('keypadDisplay');
         const mobileQuery = window.matchMedia('(hover: none) and (pointer: coarse)');
 
@@ -919,6 +962,8 @@
         let moveGrabEnd = 'upper';   // 'upper' | 'lower' visual end used for snap
 
         let mobileFromInches = null;
+        let lastBarTapIndex = -1;
+        let lastBarTapAt = 0;
         let pendingPick = null;
         let loupeActive = false;
         let loupeX = 0;
@@ -1667,7 +1712,8 @@
             const l = c.toLowerCase();
             return (c >= '0' && c <= '9') || c === '.' || c === '/' || c === '+' || c === '-' ||
                 c === '*' || c === '(' || c === ')' || c === ' ' ||
-                l === 'i' || l === 'n' || l === 'm' || l === 'f' || l === 't';
+                l === 'i' || l === 'n' || l === 'm' || l === 'f' || l === 't' ||
+                l === 'c' || l === 'y' || l === 'd' || c === '\u03c0';
         }
 
         // forceMeter: a trailing single "m" at the end of input is meters (Enter).
@@ -1677,8 +1723,10 @@
             const n = s.length;
             let i = 0;
             const IN_PER_MM = 1 / 25.4;
+            const IN_PER_CM = 10 / 25.4;
             const IN_PER_M = 1000 / 25.4;
             const IN_PER_FT = 12;
+            const IN_PER_YD = 36;
 
             function isDigit(c) { return c >= '0' && c <= '9'; }
 
@@ -1693,7 +1741,9 @@
                 let inches;
                 if (unitState.unit === 'in') inches = bare;
                 else if (unitState.unit === 'ft') inches = bare * IN_PER_FT;
+                else if (unitState.unit === 'yd') inches = bare * IN_PER_YD;
                 else if (unitState.unit === 'mm') inches = bare * IN_PER_MM;
+                else if (unitState.unit === 'cm') inches = bare * IN_PER_CM;
                 else if (unitState.unit === 'm') inches = bare * IN_PER_M;
                 else return { state: 'bad' };
                 if (!isFinite(inches)) return { state: 'bad' };
@@ -1703,7 +1753,7 @@
             function parseUnit() {
                 if (i >= n) return { state: 'ok', unit: null };
                 const c = s[i].toLowerCase();
-                if (c !== 'i' && c !== 'm' && c !== 'f') return { state: 'ok', unit: null };
+                if (c !== 'i' && c !== 'm' && c !== 'f' && c !== 'c' && c !== 'y') return { state: 'ok', unit: null };
                 if (c === 'i') {
                     i++;
                     if (i >= n) return { state: 'partial' };
@@ -1717,6 +1767,20 @@
                     if (s[i].toLowerCase() !== 't') return { state: 'bad' };
                     i++;
                     return { state: 'ok', unit: 'ft' };
+                }
+                if (c === 'y') {
+                    i++;
+                    if (i >= n) return { state: 'partial' };
+                    if (s[i].toLowerCase() !== 'd') return { state: 'bad' };
+                    i++;
+                    return { state: 'ok', unit: 'yd' };
+                }
+                if (c === 'c') {
+                    i++;
+                    if (i >= n) return { state: 'partial' };
+                    if (s[i].toLowerCase() !== 'm') return { state: 'bad' };
+                    i++;
+                    return { state: 'ok', unit: 'cm' };
                 }
                 i++;
                 if (i < n && s[i].toLowerCase() === 'm') {
@@ -1732,7 +1796,7 @@
                 skipWS();
                 if (i >= n) return { state: 'ok', value };
                 const c = s[i].toLowerCase();
-                if (c !== 'i' && c !== 'm' && c !== 'f') {
+                if (c !== 'i' && c !== 'm' && c !== 'f' && c !== 'c' && c !== 'y') {
                     i = save;
                     return { state: 'ok', value };
                 }
@@ -1811,7 +1875,7 @@
                 while (u < n && s[u] === ' ') u++;
                 if (u >= n) return null;
                 const uc = s[u].toLowerCase();
-                if (uc !== 'i' && uc !== 'm' && uc !== 'f') return null;
+                if (uc !== 'i' && uc !== 'm' && uc !== 'f' && uc !== 'c' && uc !== 'y') return null;
                 const den = parseInt(s.slice(t, d), 10);
                 if (den === 0) return { state: 'bad' };
                 i = u;
@@ -1836,6 +1900,10 @@
 
             function parseAtom() {
                 if (i >= n) return { state: 'partial' };
+                if (s[i] === '\u03c0') {
+                    i++;
+                    return { state: 'ok', value: { k: 'bare', n: Math.PI } };
+                }
                 if (s[i] === '(') {
                     i++;
                     if (i >= n) return { state: 'partial' };
@@ -1983,6 +2051,18 @@
                 const fin = parseExprString(raw + 't', side, false);
                 if (!fin.ok) return true;
                 if (!fin.complete) return expressionDeadEnd(raw + 't', side);
+                return false;
+            }
+            if (/c$/i.test(raw)) {
+                const fin = parseExprString(raw + 'm', side, false);
+                if (!fin.ok) return true;
+                if (!fin.complete) return expressionDeadEnd(raw + 'm', side);
+                return false;
+            }
+            if (/y$/i.test(raw)) {
+                const fin = parseExprString(raw + 'd', side, false);
+                if (!fin.ok) return true;
+                if (!fin.complete) return expressionDeadEnd(raw + 'd', side);
                 return false;
             }
             return false;
@@ -2399,7 +2479,8 @@
                 ctx.lineTo(leftFar, edge.y);
                 ctx.stroke();
                 noteZoomTick(leftNear, edge.y, leftFar, edgeLen);
-                labelEdge(mmText, 'left', leftFar, edge.y, above, `edge-mm-${bar.color}-${i}`);
+                const mmX = isMobileUi() ? 8 : leftFar;
+                labelEdge(mmText, 'left', mmX, edge.y, above, `edge-mm-${bar.color}-${i}`);
 
                 const rightNear = bounds.right + 5;
                 const rightFar = rightNear + edgeLen;
@@ -2408,7 +2489,8 @@
                 ctx.lineTo(rightFar, edge.y);
                 ctx.stroke();
                 noteZoomTick(rightNear, edge.y, rightFar, edgeLen);
-                labelEdge(inText, 'right', rightFar, edge.y, above, `edge-in-${bar.color}-${i}`);
+                const inX = isMobileUi() ? canvas.width - 8 : rightFar;
+                labelEdge(inText, 'right', inX, edge.y, above, `edge-in-${bar.color}-${i}`);
             });
             ctx.restore();
         }
@@ -2478,6 +2560,9 @@
         function showMeasureBtnForPick(pick) {
             pendingPick = pick;
             measureBtn.textContent = mobileFromInches == null ? 'Measure from here' : 'Measure to here';
+            const btnColor = nextMeasureColor() || '#666666';
+            measureBtn.style.background = btnColor;
+            measureBtn.style.color = btnColor === MEASURE_YELLOW ? '#1a1404' : '#fff';
             measureBtn.classList.add('visible');
             positionMeasureBtn();
         }
@@ -2486,7 +2571,7 @@
             if (mobileFromInches == null) return;
             const y = inchesToPixelY(mobileFromInches);
             const cx = canvas.width / 2;
-            ctx.strokeStyle = HIGHLIGHT_COLOR;
+            ctx.strokeStyle = nextMeasureColor() || HIGHLIGHT_COLOR;
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(cx - SELECTION_WIDTH, y);
@@ -2499,7 +2584,7 @@
             if (!loupeActive) return;
             const snapY = inchesToPixelY(loupeSnapInches);
             ctx.save();
-            ctx.strokeStyle = HIGHLIGHT_COLOR;
+            ctx.strokeStyle = nextMeasureColor() || HIGHLIGHT_COLOR;
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(0, snapY);
@@ -2705,6 +2790,7 @@
 
         let keypadBackup = null;
         let keypadFresh = false;
+        let keypadDismissPointer = false;
 
         function keypadIsOpen() {
             return keypadEl.classList.contains('visible');
@@ -2831,15 +2917,17 @@
                 }
                 if (!inputString.includes(' ')) frozenMmReadout = null;
             } else {
-                if (keypadFresh) {
-                    inputString = '';
-                    keypadFresh = false;
+                const base = keypadFresh ? '' : inputString;
+                if (ch === 'space' && base.trim() === '' && !base.includes('(')) {
+                    updateKeypadDisplay();
+                    drawRuler();
+                    return;
                 }
-                if (ch === 'space') {
-                    if (!inputString.endsWith(' ')) inputString += ' ';
-                } else {
-                    inputString += ch;
-                }
+                const next = base + (ch === 'space' ? ' ' : ch);
+                if (!isExpressionPrefix(next)) return;
+                keypadFresh = false;
+                inputString = next;
+                if (!isPlainQuantityDisplay(inputString)) frozenMmReadout = null;
             }
             updateKeypadDisplay();
             drawRuler();
@@ -3873,7 +3961,12 @@
             mouseMoved = false;
             keypadHoldSide = null;
 
+            if (keypadDismissPointer) {
+                keypadDismissPointer = false;
+                return;
+            }
             if (keypadIsOpen()) {
+                cancelMobileKeypad();
                 return;
             }
 
@@ -4034,6 +4127,19 @@
             }
 
             if (touchMode === 'move') {
+                const tappedIndex = moveIndex;
+                const now = performance.now();
+                if (!mouseMoved && tappedIndex >= 0 &&
+                    lastBarTapIndex === tappedIndex && now - lastBarTapAt < 400) {
+                    measurements.splice(tappedIndex, 1);
+                    lastBarTapIndex = -1;
+                    lastBarTapAt = 0;
+                } else if (!mouseMoved && tappedIndex >= 0) {
+                    lastBarTapIndex = tappedIndex;
+                    lastBarTapAt = now;
+                } else {
+                    lastBarTapIndex = -1;
+                }
                 endMobileMove();
                 touchMode = null;
                 drawRuler();
@@ -4066,25 +4172,41 @@
         });
 
         (function buildKeypad() {
-            const keys = [
-                ['1', '1'], ['2', '2'], ['3', '3'],
-                ['4', '4'], ['5', '5'], ['6', '6'],
-                ['7', '7'], ['8', '8'], ['9', '9'],
-                ['.', '.'], ['0', '0'], ['back', '⌫'],
-                ['clear', 'C', 'action'], ['space', 'space', 'frac'], ['/', '/', 'frac']
+            const units = [
+                ['mm', 'mm'], ['cm', 'cm'], ['m', 'm'],
+                ['in', 'in'], ['ft', 'ft'], ['yd', 'yd']
             ];
-            keys.forEach(([id, label, extra]) => {
+            const keys = [
+                ['clear', 'C', 'grey'], ['back', '⌫', 'grey'], ['(', '('], [')', ')'],
+                ['7', '7'], ['8', '8'], ['9', '9'], ['/', '/', 'yellow'],
+                ['4', '4'], ['5', '5'], ['6', '6'], ['*', '×', 'yellow'],
+                ['1', '1'], ['2', '2'], ['3', '3'], ['-', '−', 'yellow'],
+                ['\u03c0', '\u03c0'], ['0', '0'], ['.', '.'], ['+', '+', 'yellow'],
+                ['space', 'SPACE', 'spacewide'], ['done', '=', 'yellow']
+            ];
+            const add = (parent, id, label, extra) => {
                 const b = document.createElement('button');
                 b.type = 'button';
                 b.className = 'key' + (extra ? ' ' + extra : '');
                 b.dataset.key = id;
                 b.textContent = label;
-                keypadKeysEl.appendChild(b);
-            });
+                parent.appendChild(b);
+            };
+            units.forEach(([id, label]) => add(keypadUnitsEl, id, label, 'unit'));
+            keys.forEach(([id, label, extra]) => add(keypadKeysEl, id, label, extra));
         })();
 
         keypadEl.addEventListener('pointerdown', e => e.stopPropagation());
         keypadEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: false });
+        document.addEventListener('pointerdown', e => {
+            if (!keypadIsOpen()) return;
+            if (e.target.closest && e.target.closest('#keypad')) return;
+            keypadDismissPointer = true;
+            cancelMobileKeypad();
+        });
+        document.addEventListener('pointerup', () => {
+            keypadDismissPointer = false;
+        });
         keypadEl.addEventListener('click', e => {
             const btn = e.target.closest('.key');
             if (!btn) return;
